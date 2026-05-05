@@ -1,0 +1,19 @@
+# Rust build outputs
+**/target/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Tauri bundle output
+eclusa-monitor/src-tauri/target/
+eclusa-monitor/src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local

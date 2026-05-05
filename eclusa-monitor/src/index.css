@@ -1,0 +1,21 @@
+@import "@fontsource/mulish/400.css";
+@import "@fontsource/mulish/500.css";
+@import "@fontsource/mulish/600.css";
+@import "@fontsource/mulish/700.css";
+@import "@fontsource/mulish/800.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #212E3E;
+  font-family: "Mulish", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
