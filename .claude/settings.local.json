@@ -3,7 +3,20 @@
     "allow": [
       "Bash(cargo build *)",
       "Bash(npx tsc *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(cargo clean *)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\Admin\\\\Desktop\\\\Controle_Acesso\\\\wincc-scripts\\\\supervisao.vbs\")",
+      "Bash(ping -n 2 10.45.235.178)",
+      "Bash(qwinsta /server:172.29.164.54)",
+      "Bash(C:\\\\ffmpeg-8.1.1\\\\bin\\\\ffmpeg.exe -version)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Controle_Acesso\\\\eclusa-monitor\\\\src\\\\\" | Select-Object -Property Name, PSIsContainer)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:rustdesk.com)",
+      "WebFetch(domain:fossies.org)",
+      "Bash(cargo check *)",
+      "PowerShell(cd \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Controle_Acesso\\\\wincc-api\\\\target\\\\release\"; .\\\\wincc-api.exe; Write-Host \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(Stop-Process -Name \"eclusa-monitor\" -Force -ErrorAction SilentlyContinue)"
     ]
   }
 }

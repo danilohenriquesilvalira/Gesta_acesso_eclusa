@@ -79,6 +79,7 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
         className="relative flex overflow-hidden"
         style={{
           width: 780,
+          minHeight: 560,
           borderRadius: 20,
           boxShadow: "0 32px 80px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.25)",
         }}
@@ -95,7 +96,7 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
                 Sistema de<br />Controlo de Acesso
               </p>
               <p className="text-white/45 text-[13px] mt-2 leading-relaxed">
-                Eclusas WinCC<br />Produção Hidroelétrica
+                Eclusas de Navegacao WinCC
               </p>
             </div>
           </div>
@@ -117,9 +118,9 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
         </div>
 
         {/* ── Painel direito — formulário branco ── */}
-        <div className="flex-1 bg-white flex flex-col justify-center px-10 py-10">
+        <div className="flex-1 bg-white flex flex-col justify-between px-12 py-12">
           {semUsers ? (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col h-full justify-between">
               <div>
                 <div
                   className="w-12 h-12 rounded-2xl flex items-center justify-center text-[22px] font-extrabold mb-4"
@@ -143,20 +144,22 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
               </button>
             </div>
           ) : (
-            <div>
-              <p className="font-extrabold text-[22px] leading-none" style={{ color: "#0f172a" }}>
-                Autenticação
-              </p>
-              <p className="text-[13px] mt-1.5 mb-8" style={{ color: "#94a3b8" }}>
-                Introduza as suas credenciais de operador
-              </p>
+            <div className="flex flex-col h-full justify-center gap-8">
+              <div className="text-center">
+                <p className="font-extrabold text-[24px] leading-none" style={{ color: "#0f172a" }}>
+                  Autenticacao
+                </p>
+                <p className="text-[13px] mt-2" style={{ color: "#94a3b8" }}>
+                  Introduza as suas credenciais de operador
+                </p>
+              </div>
 
-              <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 {/* Utilizador */}
                 <div>
                   <label
                     className="block font-extrabold uppercase tracking-widest mb-2"
-                    style={{ fontSize: 10, color: "#94a3b8" }}
+                    style={{ fontSize: 10, color: "#0f172a" }}
                   >
                     Utilizador
                   </label>
@@ -171,7 +174,7 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
                       width: "100%",
                       border: "1.5px solid #e2e8f0",
                       borderRadius: 12,
-                      padding: "12px 16px",
+                      padding: "13px 16px",
                       fontSize: 14,
                       fontWeight: 600,
                       color: "#0f172a",
@@ -188,7 +191,7 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
                 <div>
                   <label
                     className="block font-extrabold uppercase tracking-widest mb-2"
-                    style={{ fontSize: 10, color: "#94a3b8" }}
+                    style={{ fontSize: 10, color: "#0f172a" }}
                   >
                     Senha
                   </label>
@@ -202,7 +205,7 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
                       width: "100%",
                       border: "1.5px solid #e2e8f0",
                       borderRadius: 12,
-                      padding: "12px 16px",
+                      padding: "13px 16px",
                       fontSize: 14,
                       fontWeight: 600,
                       color: "#0f172a",
@@ -221,27 +224,27 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
                     className="flex items-center gap-3 px-4 py-3 rounded-xl"
                     style={{ background: "#fff1f2", border: "1.5px solid #fecdd3" }}
                   >
-                    <span style={{ color: "#e11d48", fontSize: 15 }}>⚠</span>
+                    <span style={{ color: "#e11d48", fontSize: 15 }}>&#9888;</span>
                     <p className="text-[13px] font-semibold" style={{ color: "#be123c" }}>{erro}</p>
                   </div>
                 )}
-
-                {/* Botão */}
-                <button
-                  type="submit"
-                  disabled={!username.trim() || !password || loading}
-                  className="w-full rounded-xl font-extrabold text-[14px] text-white transition-all cursor-pointer disabled:cursor-not-allowed"
-                  style={{
-                    padding: "14px 0",
-                    background: (!username.trim() || !password || loading) ? "#e2e8f0" : "#212E3E",
-                    color:      (!username.trim() || !password || loading) ? "#94a3b8" : "#ffffff",
-                    boxShadow:  (!username.trim() || !password || loading) ? "none" : "0 4px 14px rgba(33,46,62,0.30)",
-                    letterSpacing: "0.03em",
-                  }}
-                >
-                  {loading ? "A verificar..." : "Entrar no Sistema"}
-                </button>
               </form>
+
+              <button
+                type="submit"
+                onClick={handleSubmit}
+                disabled={!username.trim() || !password || loading}
+                className="w-full rounded-xl font-extrabold text-[14px] text-white transition-all cursor-pointer disabled:cursor-not-allowed"
+                style={{
+                  padding: "15px 0",
+                  background: (!username.trim() || !password || loading) ? "#e2e8f0" : "#212E3E",
+                  color:      (!username.trim() || !password || loading) ? "#94a3b8" : "#ffffff",
+                  boxShadow:  (!username.trim() || !password || loading) ? "none" : "0 4px 14px rgba(33,46,62,0.30)",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {loading ? "A verificar..." : "Entrar no Sistema"}
+              </button>
             </div>
           )}
         </div>

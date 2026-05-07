@@ -17,5 +17,6 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
+  "exclude": ["src/components/_legacy"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

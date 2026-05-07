@@ -32,12 +32,19 @@ export interface RdpInfo {
   nao_autorizado: boolean;
 }
 
-export interface Estado {
-  sessoes:    { cliente1: Sessao; cliente2: Sessao };
-  rdp:        { cliente1: RdpInfo; cliente2: RdpInfo };
-  eclusas:    { timestamp: string; eclusas: { [k: string]: Eclusa } };
-  operadores: string[];
+export interface Supervisao {
+  supervisor: string;
   timestamp:  string;
+  ativo:      boolean;
+}
+
+export interface Estado {
+  sessoes:     { cliente1: Sessao; cliente2: Sessao };
+  rdp:         { cliente1: RdpInfo; cliente2: RdpInfo };
+  eclusas:     { timestamp: string; eclusas: { [k: string]: Eclusa } };
+  supervisoes: { cliente1: Supervisao; cliente2: Supervisao };
+  operadores:  string[];
+  timestamp:   string;
 }
 
 type ClienteKey = "cliente1" | "cliente2";
@@ -75,9 +82,10 @@ export default function App() {
   const [apiOk,      setApiOk]      = useState<boolean | null>(null);
   const [agora,      setAgora]      = useState(new Date());
   const [erro,       setErro]       = useState("");
-  const [conectando, setConectando] = useState<ClienteKey | null>(null);
+  const [conectando,   setConectando]   = useState<ClienteKey | null>(null);
+  const [emSupervisao, setEmSupervisao] = useState<ClienteKey | null>(null);
 
-  const ehAdmin = !!utilizador; // qualquer utilizador autenticado acede ao painel admin
+  const ehAdmin = !!utilizador;
 
   // Config Tauri
   useEffect(() => {
@@ -118,7 +126,7 @@ export default function App() {
     return () => { es.close(); clearInterval(t); };
   }, [apiUrl, fetchEstado]);
 
-  // Evento mstsc fechado → encerrar sessão automaticamente
+  // Evento mstsc operação fechado → encerrar sessão
   useEffect(() => {
     const unlisten = listen<string>("rdp-desconectado", event => {
       handleEncerrar(event.payload as ClienteKey);
@@ -126,11 +134,27 @@ export default function App() {
     return () => { unlisten.then(fn => fn()); };
   }, [apiUrl]);
 
+  // Evento shadow fechado → encerrar supervisão na API e limpar estado local
+  useEffect(() => {
+    const unlisten = listen<string>("shadow-fechado", event => {
+      const cliente = event.payload as ClienteKey;
+      fetch(`${apiUrl}/supervisao/encerrar`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ cliente }),
+      }).catch(() => {});
+      setEmSupervisao(null);
+    });
+    return () => { unlisten.then(fn => fn()); };
+  }, [apiUrl]);
+
+
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const sessao  = (k: ClienteKey): Sessao  => estado?.sessoes[k]  ?? { operador: "", timestamp_inicio: "", conectado: false };
-  const rdpInfo = (k: ClienteKey): RdpInfo => estado?.rdp?.[k]    ?? { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false };
-  const eclusa  = (key: string): Eclusa | undefined => estado?.eclusas?.eclusas?.[key];
+  const sessao     = (k: ClienteKey): Sessao     => estado?.sessoes[k]      ?? { operador: "", timestamp_inicio: "", conectado: false };
+  const rdpInfo    = (k: ClienteKey): RdpInfo    => estado?.rdp?.[k]        ?? { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false };
+  const eclusa     = (key: string): Eclusa | undefined => estado?.eclusas?.eclusas?.[key];
+  const supervisao = (k: ClienteKey): Supervisao => estado?.supervisoes?.[k] ?? { supervisor: "", timestamp: "", ativo: false };
 
   const handleConectar = async (cliente: ClienteKey) => {
     if (!utilizador) { setLoginAberto(true); return; }
@@ -161,12 +185,59 @@ export default function App() {
       if (!data.ok) { setErro(data.erro ?? "Erro ao registar sessão."); return; }
       fetchEstado();
       const msg = await invoke<string>("connect_rdp", { ip: CLIENTES[cliente].ip, cliente });
-      if (msg) setErro(msg);
+      if (msg) { setErro(msg); return; }
     } catch {
       setErro("Erro ao contactar a API.");
     } finally {
       setConectando(null);
     }
+  };
+
+  const handleSupervisao = async (cliente: ClienteKey) => {
+    if (!utilizador) { setLoginAberto(true); return; }
+
+    const rollback = () => fetch(`${apiUrl}/supervisao/encerrar`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ cliente }),
+    }).catch(() => {});
+
+    let registado = false;
+    try {
+      // API valida interlocks e devolve o session_id correcto
+      const r = await fetch(`${apiUrl}/supervisao/iniciar`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ cliente, supervisor: utilizador }),
+      });
+      const data = await r.json();
+      if (!data.ok) { setErro(data.erro ?? "Sem sessão activa para supervisionar."); return; }
+
+      registado = true;
+      const sessaoId: number = data.sessao_id ?? 0;
+      if (!sessaoId) { rollback(); setErro("Session ID inválido — refresca o estado."); return; }
+
+      // Lança mstsc /shadow com o session_id fornecido pela API
+      const msg = await invoke<string>("connect_shadow", { cliente, sessaoId });
+      if (msg) { rollback(); setErro(msg); return; }
+
+      setEmSupervisao(cliente);
+    } catch (e) {
+      if (registado) rollback();
+      setErro(`Erro supervisão: ${String(e)}`);
+    }
+  };
+
+  const handleSairSupervisao = async () => {
+    if (emSupervisao) {
+      fetch(`${apiUrl}/supervisao/encerrar`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ cliente: emSupervisao }),
+      }).catch(() => {});
+    }
+    try { await invoke("fechar_shadow"); } catch { /* ignora */ }
+    setEmSupervisao(null);
   };
 
   const handleEncerrar = async (cliente: ClienteKey) => {
@@ -183,11 +254,25 @@ export default function App() {
 
   // ── Páginas admin ────────────────────────────────────────────────────────────
 
-  if (pagina === "admin-utilizadores" as Pagina || pagina === "admin-usuarios") {
-    return <AdminUtilizadores apiUrl={apiUrl} onVoltar={() => setPagina("dashboard")} />;
-  }
-  if (pagina === "admin-logs") {
-    return <AdminLogs apiUrl={apiUrl} onVoltar={() => setPagina("dashboard")} />;
+  if (pagina === "admin-utilizadores" as Pagina || pagina === "admin-usuarios" || pagina === "admin-logs") {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden font-sans" style={{ background: "#212E3E" }}>
+        <Header
+          utilizador={utilizador}
+          ehAdmin={ehAdmin}
+          agora={agora}
+          apiOk={apiOk}
+          pagina={pagina}
+          onPagina={setPagina}
+          onLoginClick={() => setLoginAberto(true)}
+          onSair={() => { setUtilizador(""); setPagina("dashboard"); }}
+        />
+        {(pagina === "admin-utilizadores" || pagina === "admin-usuarios")
+          ? <AdminUtilizadores apiUrl={apiUrl} />
+          : <AdminLogs apiUrl={apiUrl} />
+        }
+      </div>
+    );
   }
 
   // ── Dashboard ────────────────────────────────────────────────────────────────
@@ -228,6 +313,7 @@ export default function App() {
                   rdp={cliente ? rdpInfo(cliente) : { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false }}
                   agora={agora}
                   conectando={cliente ? conectando === cliente : false}
+                  ehAdmin={ehAdmin}
                   onConectar={() => cliente && handleConectar(cliente)}
                   onEncerrar={() => cliente && handleEncerrar(cliente)}
                   utilizadorAtual={utilizador}
@@ -251,9 +337,22 @@ export default function App() {
             )}
           </div>
           <div className="grid grid-cols-5 gap-4 flex-1 min-h-0">
-            {ECLUSA_KEYS.map(key => (
-              <EclusaMonitorCard key={key} nome={key} eclusa={eclusa(key)} />
-            ))}
+            {ECLUSA_KEYS.map(key => {
+              const cliente = ECLUSA_CLIENTE[key as keyof typeof ECLUSA_CLIENTE];
+              return (
+                <EclusaMonitorCard
+                  key={key}
+                  nome={key}
+                  eclusa={eclusa(key)}
+                  ehAdmin={ehAdmin}
+                  emSupervisao={cliente ? emSupervisao === cliente : false}
+                  supervisaoAtiva={cliente ? supervisao(cliente) : { supervisor: "", timestamp: "", ativo: false }}
+                  utilizadorAtual={utilizador}
+                  onSupervisao={() => cliente && handleSupervisao(cliente)}
+                  onSairSupervisao={handleSairSupervisao}
+                />
+              );
+            })}
           </div>
         </div>
 

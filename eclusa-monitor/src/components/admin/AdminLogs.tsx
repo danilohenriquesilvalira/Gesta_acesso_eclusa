@@ -1,38 +1,36 @@
 import { useState, useEffect, useCallback } from "react";
 
 interface LogEntry {
-  id:         number;
-  tipo:       string;
-  mensagem:   string;
-  timestamp:  string;
+  id:        number;
+  tipo:      string;
+  mensagem:  string;
+  timestamp: string;
 }
 
-const TIPO_CONFIG: Record<string, { cor: string; icon: string }> = {
-  login:       { cor: "text-edp-blue bg-blue-50 border-blue-200",    icon: "→" },
-  logout:      { cor: "text-edp-sub bg-edp-surface border-edp-border", icon: "←" },
-  acesso:      { cor: "text-edp-green bg-green-50 border-green-200",  icon: "▶" },
-  encerrar:    { cor: "text-orange-600 bg-orange-50 border-orange-200", icon: "■" },
-  bloqueio:    { cor: "text-edp-red bg-red-50 border-red-200",        icon: "⊘" },
-  desconexao:  { cor: "text-yellow-700 bg-yellow-50 border-yellow-200", icon: "✕" },
+const TIPO_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  login:      { label: "Login",      bg: "rgba(59,130,246,0.1)",  color: "#3b82f6" },
+  logout:     { label: "Logout",     bg: "rgba(100,116,139,0.1)", color: "#64748B" },
+  acesso:     { label: "Acesso",     bg: "rgba(0,166,81,0.1)",    color: "#00A651" },
+  encerrar:   { label: "Encerrar",   bg: "rgba(251,146,60,0.1)",  color: "#f97316" },
+  bloqueio:   { label: "Bloqueio",   bg: "rgba(227,6,19,0.1)",    color: "#E30613" },
+  desconexao: { label: "Desconexao", bg: "rgba(234,179,8,0.1)",   color: "#ca8a04" },
 };
 
 interface Props {
-  apiUrl:   string;
-  onVoltar: () => void;
+  apiUrl: string;
 }
 
-export default function AdminLogs({ apiUrl, onVoltar }: Props) {
-  const [logs,     setLogs]     = useState<LogEntry[]>([]);
-  const [filtro,   setFiltro]   = useState<string>("todos");
-  const [loading,  setLoading]  = useState(true);
-  const [erro,     setErro]     = useState("");
+export default function AdminLogs({ apiUrl }: Props) {
+  const [logs,    setLogs]    = useState<LogEntry[]>([]);
+  const [filtro,  setFiltro]  = useState<string>("todos");
+  const [loading, setLoading] = useState(true);
+  const [erro,    setErro]    = useState("");
 
   const carregar = useCallback(async () => {
     try {
       const r    = await fetch(`${apiUrl}/logs`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json() as LogEntry[];
-      setLogs(data);
+      setLogs(await r.json() as LogEntry[]);
       setErro("");
     } catch (e) {
       setErro(`Erro ao carregar logs: ${e}`);
@@ -47,149 +45,171 @@ export default function AdminLogs({ apiUrl, onVoltar }: Props) {
     return () => clearInterval(t);
   }, [carregar]);
 
-  const tipos = ["todos", ...Array.from(new Set(logs.map(l => l.tipo))).sort()];
+  const tipos     = ["todos", ...Array.from(new Set(logs.map(l => l.tipo))).sort()];
   const filtrados = filtro === "todos" ? logs : logs.filter(l => l.tipo === filtro);
-
-  const cfg = (tipo: string) => TIPO_CONFIG[tipo] ?? { cor: "text-edp-sub bg-edp-surface border-edp-border", icon: "•" };
+  const cfg       = (tipo: string) => TIPO_CONFIG[tipo] ?? { label: tipo, bg: "rgba(100,116,139,0.1)", color: "#64748B" };
 
   return (
-    <div className="h-screen flex flex-col font-sans overflow-hidden" style={{ background: "#212E3E" }}>
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-6 py-5">
+      <div className="flex-1 flex gap-5 min-h-0 overflow-hidden">
 
-      {/* Faixa topo */}
-      <div className="shrink-0 border-b border-white/10 px-6 py-3 flex items-center justify-between" style={{ background: "#212E3E" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-edp-red rounded-lg flex items-center justify-center">
-            <span className="text-white font-black text-xs">EDP</span>
-          </div>
-          <div>
-            <p className="text-xs font-extrabold text-white leading-none">Logs do Sistema</p>
-            <p className="text-[9px] text-white/35 mt-0.5">Histórico de Acessos e Eventos</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={carregar}
-            className="px-3 py-1.5 rounded-lg border border-white/15 text-white/60 hover:text-white hover:border-white/40 text-xs font-bold transition-all cursor-pointer"
-          >
-            ↻ Atualizar
-          </button>
-          <button
-            onClick={onVoltar}
-            className="px-4 py-1.5 rounded-lg border border-white/15 text-white/60 hover:text-white hover:border-white/40 text-xs font-bold transition-all cursor-pointer"
-          >
-            ← Voltar
-          </button>
-        </div>
-      </div>
-
-      <main className="flex-1 flex gap-5 p-6 min-h-0 overflow-hidden">
-
-        {/* Sidebar filtros + stats */}
+        {/* Sidebar: filtros + resumo */}
         <div className="w-52 shrink-0 flex flex-col gap-4">
-          {/* Filtro por tipo */}
-          <div className="bg-edp-card rounded-2xl border border-edp-border shadow-md overflow-hidden">
-            <div className="bg-edp-surface border-b border-edp-border px-4 py-3">
-              <p className="text-[9px] font-extrabold text-edp-sub uppercase tracking-widest">Filtrar por Tipo</p>
+
+          {/* Filtros */}
+          <div
+            className="rounded-2xl overflow-hidden flex flex-col"
+            style={{ background: "#FFFFFF", border: "1px solid #C8D8EE", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+          >
+            <div className="px-4 py-4" style={{ background: "#F8FAFD", borderBottom: "2px solid #C8D8EE" }}>
+              <p className="text-[9px] font-extrabold uppercase tracking-[0.2em]" style={{ color: "#1B2F48" }}>Filtrar por Tipo</p>
             </div>
             <div className="p-2">
-              {tipos.map(t => (
-                <button
-                  key={t}
-                  onClick={() => setFiltro(t)}
-                  className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer mb-0.5 ${
-                    filtro === t
-                      ? "bg-edp-blue text-white"
-                      : "text-edp-sub hover:bg-edp-surface hover:text-edp-text"
-                  }`}
-                >
-                  <span className="capitalize">{t}</span>
-                  {t !== "todos" && (
-                    <span className={`ml-1.5 text-[9px] font-mono ${filtro === t ? "text-white/60" : "text-edp-sub/60"}`}>
-                      ({logs.filter(l => l.tipo === t).length})
-                    </span>
-                  )}
-                </button>
-              ))}
+              {tipos.map(t => {
+                const ativo = filtro === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setFiltro(t)}
+                    className="w-full text-left px-3 py-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer mb-0.5 capitalize"
+                    style={{
+                      background: ativo ? "#E30613" : "transparent",
+                      color:      ativo ? "#FFFFFF" : "#64748B",
+                    }}
+                    onMouseEnter={e => { if (!ativo) (e.currentTarget as HTMLButtonElement).style.background = "#EEF3FB"; }}
+                    onMouseLeave={e => { if (!ativo) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                  >
+                    {t}
+                    {t !== "todos" && (
+                      <span className="ml-1.5 text-[9px] font-mono opacity-50">({logs.filter(l => l.tipo === t).length})</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Estatísticas */}
-          <div className="bg-edp-card rounded-2xl border border-edp-border shadow-md p-4">
-            <p className="text-[9px] font-extrabold text-edp-sub uppercase tracking-widest mb-3">Resumo</p>
-            <div className="space-y-2">
+          {/* Resumo */}
+          <div
+            className="rounded-2xl p-4"
+            style={{ background: "#FFFFFF", border: "1px solid #C8D8EE", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+          >
+            <div className="px-0 pb-3 mb-3" style={{ borderBottom: "1px solid #EEF3FB" }}>
+              <p className="text-[9px] font-extrabold uppercase tracking-[0.2em]" style={{ color: "#1B2F48" }}>Resumo</p>
+            </div>
+            <div className="flex flex-col gap-3">
               {[
-                { label: "Total de eventos", valor: logs.length, cor: "text-edp-blue" },
-                { label: "Bloqueios",        valor: logs.filter(l => l.tipo === "bloqueio").length, cor: "text-edp-red" },
-                { label: "Acessos",          valor: logs.filter(l => l.tipo === "acesso").length, cor: "text-edp-green" },
-                { label: "Logins",           valor: logs.filter(l => l.tipo === "login").length, cor: "text-edp-blue" },
+                { label: "Total",     valor: logs.length,                                    cor: "#1B2F48" },
+                { label: "Bloqueios", valor: logs.filter(l => l.tipo === "bloqueio").length, cor: "#E30613" },
+                { label: "Acessos",   valor: logs.filter(l => l.tipo === "acesso").length,   cor: "#00A651" },
+                { label: "Logins",    valor: logs.filter(l => l.tipo === "login").length,    cor: "#3b82f6" },
               ].map(s => (
                 <div key={s.label} className="flex items-center justify-between">
-                  <span className="text-[9px] text-edp-sub font-semibold">{s.label}</span>
-                  <span className={`text-xs font-extrabold ${s.cor}`}>{s.valor}</span>
+                  <span className="text-[10px] font-semibold" style={{ color: "#7A94C1" }}>{s.label}</span>
+                  <span className="text-[14px] font-extrabold" style={{ color: s.cor }}>{s.valor}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Tabela de logs */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="bg-edp-card rounded-2xl border border-edp-border shadow-md overflow-hidden flex flex-col flex-1">
-            <div className="bg-edp-surface border-b border-edp-border px-6 py-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-extrabold text-edp-text">Registos de Eventos</h2>
-                <p className="text-[10px] text-edp-sub mt-0.5">
-                  {filtro === "todos" ? `${logs.length} eventos` : `${filtrados.length} eventos · ${filtro}`}
-                </p>
-              </div>
-              {!loading && erro && (
-                <span className="text-xs text-edp-red font-semibold">{erro}</span>
-              )}
+        {/* Card principal */}
+        <div
+          className="flex-1 rounded-2xl overflow-hidden flex flex-col"
+          style={{ background: "#FFFFFF", border: "1px solid #C8D8EE", boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}
+        >
+          {/* Cabecalho */}
+          <div
+            className="shrink-0 px-8 py-5 flex items-center justify-between"
+            style={{ background: "#F8FAFD", borderBottom: "2px solid #C8D8EE" }}
+          >
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.22em]" style={{ color: "#1B2F48" }}>
+                Administracao do Sistema
+              </p>
+              <p className="text-[22px] font-black leading-tight mt-0.5" style={{ color: "#1B2F48" }}>
+                Registos de Eventos
+              </p>
             </div>
-
-            <div className="flex-1 overflow-auto">
-              {loading ? (
-                <div className="flex items-center justify-center py-16">
-                  <div className="w-6 h-6 border-2 border-edp-blue border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : filtrados.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-2">
-                  <p className="text-edp-sub text-sm font-semibold">Sem registos</p>
-                </div>
-              ) : (
-                <table className="w-full">
-                  <thead className="sticky top-0 bg-edp-surface border-b border-edp-border">
-                    <tr>
-                      <th className="text-left px-6 py-3 text-[9px] text-edp-sub font-extrabold uppercase tracking-widest">Tipo</th>
-                      <th className="text-left px-6 py-3 text-[9px] text-edp-sub font-extrabold uppercase tracking-widest">Mensagem</th>
-                      <th className="text-right px-6 py-3 text-[9px] text-edp-sub font-extrabold uppercase tracking-widest">Timestamp</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtrados.map((log, i) => {
-                      const c = cfg(log.tipo);
-                      return (
-                        <tr key={log.id} className={`border-b border-edp-border/40 hover:bg-edp-surface/50 transition-colors ${i % 2 === 0 ? "" : "bg-edp-surface/20"}`}>
-                          <td className="px-6 py-3">
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-extrabold border capitalize ${c.cor}`}>
-                              <span>{c.icon}</span>
-                              {log.tipo}
-                            </span>
-                          </td>
-                          <td className="px-6 py-3 text-xs text-edp-text font-medium">{log.mensagem}</td>
-                          <td className="px-6 py-3 text-right">
-                            <span className="text-[10px] text-edp-sub font-mono">{log.timestamp}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            <div className="flex items-center gap-4">
+              {!loading && erro && (
+                <span className="text-[11px] font-semibold" style={{ color: "#E30613" }}>{erro}</span>
               )}
+              <div
+                className="flex items-center gap-2 px-4 py-2 rounded-full"
+                style={{ background: "#EEF3FB", border: "1px solid #C8D8EE" }}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ background: "#00A651" }} />
+                <span className="font-extrabold text-[14px]" style={{ color: "#1B2F48" }}>{filtrados.length}</span>
+                <span className="text-[11px] font-semibold" style={{ color: "#7A94C1" }}>
+                  {filtro === "todos" ? "eventos" : filtro}
+                </span>
+              </div>
+              <button
+                onClick={carregar}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-[13px] transition-all cursor-pointer"
+                style={{ background: "#EEF3FB", border: "1px solid #C8D8EE", color: "#1B2F48" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#C8D8EE"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#EEF3FB"; }}
+              >
+                Atualizar
+              </button>
             </div>
           </div>
+
+          {/* Tabela */}
+          <div className="flex-1 overflow-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: "#C8D8EE", borderTopColor: "#1B2F48" }} />
+              </div>
+            ) : filtrados.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "#EEF3FB" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7A94C1" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                </div>
+                <p className="text-[14px] font-bold" style={{ color: "#7A94C1" }}>Sem registos</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="sticky top-0" style={{ background: "#1B2F48" }}>
+                  <tr>
+                    <th className="text-left px-8 py-3.5 text-[10px] font-extrabold uppercase tracking-[0.18em]" style={{ color: "#FFFFFF" }}>Tipo</th>
+                    <th className="text-left px-8 py-3.5 text-[10px] font-extrabold uppercase tracking-[0.18em]" style={{ color: "#FFFFFF" }}>Mensagem</th>
+                    <th className="text-right px-8 py-3.5 text-[10px] font-extrabold uppercase tracking-[0.18em]" style={{ color: "#FFFFFF" }}>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtrados.map((log, i) => {
+                    const c = cfg(log.tipo);
+                    return (
+                      <tr
+                        key={log.id}
+                        style={{ borderBottom: "1px solid #EEF3FB", background: i % 2 === 1 ? "#F8FAFD" : "#FFFFFF" }}
+                      >
+                        <td className="px-8 py-3.5">
+                          <span
+                            className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-extrabold capitalize"
+                            style={{ background: c.bg, color: c.color }}
+                          >
+                            {c.label}
+                          </span>
+                        </td>
+                        <td className="px-8 py-3.5 text-[13px] font-medium" style={{ color: "#1B2F48" }}>{log.mensagem}</td>
+                        <td className="px-8 py-3.5 text-right">
+                          <span className="text-[12px] font-mono" style={{ color: "#64748B" }}>{log.timestamp}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
