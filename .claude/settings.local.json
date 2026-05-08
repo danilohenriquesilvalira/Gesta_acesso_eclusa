@@ -16,7 +16,10 @@
       "WebFetch(domain:fossies.org)",
       "Bash(cargo check *)",
       "PowerShell(cd \"C:\\\\Users\\\\Admin\\\\Desktop\\\\Controle_Acesso\\\\wincc-api\\\\target\\\\release\"; .\\\\wincc-api.exe; Write-Host \"EXIT: $LASTEXITCODE\")",
-      "PowerShell(Stop-Process -Name \"eclusa-monitor\" -Force -ErrorAction SilentlyContinue)"
+      "PowerShell(Stop-Process -Name \"eclusa-monitor\" -Force -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Admin\\\\Desktop\\\\Controle_Acesso\" -Recurse -Force)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)"
     ]
   }
 }

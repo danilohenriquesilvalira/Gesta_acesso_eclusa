@@ -8,6 +8,7 @@ import EclusaAcessoCard    from "./components/eclusa/EclusaAcessoCard";
 import EclusaMonitorCard   from "./components/eclusa/EclusaMonitorCard";
 import AdminUtilizadores   from "./components/admin/AdminUtilizadores";
 import AdminLogs           from "./components/admin/AdminLogs";
+import Apresentacao        from "./components/Apresentacao";
 
 // ── Tipos exportados ──────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ export interface Estado {
 }
 
 type ClienteKey = "cliente1" | "cliente2";
-type Pagina     = "dashboard" | "admin-usuarios" | "admin-logs";
+type Pagina     = "dashboard" | "admin-usuarios" | "admin-logs" | "apresentacao";
 interface Config { api_url: string }
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -251,6 +252,26 @@ export default function App() {
       fetchEstado();
     } catch { /* ignora */ }
   };
+
+  // ── Página de Apresentação ──────────────────────────────────────────────────
+
+  if (pagina === "apresentacao") {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden font-sans" style={{ background: "#212E3E" }}>
+        <Header
+          utilizador={utilizador}
+          ehAdmin={ehAdmin}
+          agora={agora}
+          apiOk={apiOk}
+          pagina={pagina}
+          onPagina={setPagina}
+          onLoginClick={() => setLoginAberto(true)}
+          onSair={() => { setUtilizador(""); setPagina("dashboard"); }}
+        />
+        <Apresentacao />
+      </div>
+    );
+  }
 
   // ── Páginas admin ────────────────────────────────────────────────────────────
 
