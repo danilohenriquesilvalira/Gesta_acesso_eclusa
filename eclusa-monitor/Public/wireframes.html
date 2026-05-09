@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>EDP Acessos — Wireframes</title>
+<title>Openmes — Wireframes</title>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Kalam:wght@400;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -12,15 +12,14 @@
     --paper:#fbf9f4;
     --paper-2:#f3efe6;
     --line:#2b2b2b;
-    --edp-navy:#212E3E;
-    --edp-blue:#1B4F9C;
-    --edp-light:#4DAEE5;
-    --edp-red:#E30613;
-    --edp-green:#00A651;
-    --edp-olive:#5A9B6B;
-    --edp-terra:#8B5E3C;
-    --edp-cream:#E6D4CA;
-    --accent:#FACC15;
+    --senai:#336EBF;
+    --senai-2:#4DAEE5;
+    --lagoa-red:#71202F;
+    --lagoa-green:#618127;
+    --lagoa-olive:#AEB859;
+    --lagoa-terra:#BA6059;
+    --lagoa-cream:#E6D4CA;
+    --openmes:#FACC15;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:"Kalam",system-ui,sans-serif}
@@ -52,7 +51,7 @@
     box-shadow:2px 2px 0 var(--ink);
   }
   .tab:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
-  .tab.active{background:var(--accent)}
+  .tab.active{background:var(--openmes)}
   .legend{
     display:flex;gap:14px;align-items:center;margin-left:auto;
     font-family:"Gloria Hallelujah";font-size:12px;
@@ -118,10 +117,10 @@
   .hatch{
     background-image:repeating-linear-gradient(45deg, var(--ink) 0 1.5px, transparent 1.5px 8px);
   }
-  .hatch-blue{background-image:repeating-linear-gradient(45deg, var(--edp-navy) 0 1.5px, transparent 1.5px 8px)}
-  .hatch-red{background-image:repeating-linear-gradient(45deg, var(--edp-red) 0 1.5px, transparent 1.5px 8px)}
-  .hatch-green{background-image:repeating-linear-gradient(45deg, var(--edp-green) 0 1.5px, transparent 1.5px 8px)}
-  .hatch-yellow{background-image:repeating-linear-gradient(45deg, #c59b05 0 1.5px, transparent 1.5px 8px); background-color:var(--accent)}
+  .hatch-blue{background-image:repeating-linear-gradient(45deg, var(--senai) 0 1.5px, transparent 1.5px 8px)}
+  .hatch-red{background-image:repeating-linear-gradient(45deg, var(--lagoa-red) 0 1.5px, transparent 1.5px 8px)}
+  .hatch-green{background-image:repeating-linear-gradient(45deg, var(--lagoa-green) 0 1.5px, transparent 1.5px 8px)}
+  .hatch-yellow{background-image:repeating-linear-gradient(45deg, #c59b05 0 1.5px, transparent 1.5px 8px); background-color:var(--openmes)}
 
   .h-hand{font-family:"Caveat",cursive;font-weight:700;line-height:1}
   .p-hand{font-family:"Kalam"}
@@ -142,11 +141,11 @@
     font-family:"Kalam";font-weight:700;font-size:15px;
     padding:10px 18px;border:2px solid var(--ink);border-radius:14px 10px 16px 12px;
     box-shadow:3px 3px 0 var(--ink);
-    background:var(--accent);
+    background:var(--openmes);
     cursor:pointer;
   }
   .btn-hand.ghost{background:var(--paper)}
-  .btn-hand.blue{background:var(--edp-light);color:white}
+  .btn-hand.blue{background:var(--senai-2);color:white}
 
   /* Logo rows */
   .logos-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
@@ -166,7 +165,7 @@
   }
 
   .tag-arrow{
-    font-family:"Caveat";font-size:18px;color:var(--edp-red);
+    font-family:"Caveat";font-size:18px;color:var(--lagoa-red);
     transform:rotate(-3deg);display:inline-block;
   }
 
@@ -179,7 +178,7 @@
 
   /* Notes margin */
   .annotation{
-    position:absolute;font-family:"Caveat";font-weight:600;color:var(--edp-red);
+    position:absolute;font-family:"Caveat";font-weight:600;color:var(--lagoa-red);
     font-size:18px;pointer-events:none;
   }
   .annotation svg{display:block}
@@ -259,15 +258,15 @@
     font-family:"Kalam";font-size:12px;padding:3px 8px;border:1.5px solid var(--ink);
     border-radius:8px;background:var(--paper);cursor:pointer;
   }
-  #tweaks .row button.on{background:var(--accent)}
+  #tweaks .row button.on{background:var(--openmes)}
 
   /* Accent variants (Tweaks) */
-  body.accent-navy .hatch-yellow{background-color:var(--edp-navy);background-image:repeating-linear-gradient(45deg, #0d1620 0 1.5px, transparent 1.5px 8px)}
-  body.accent-navy .btn-hand{background:var(--edp-navy);color:white}
-  body.accent-red .hatch-yellow{background-color:var(--edp-red);color:white;background-image:repeating-linear-gradient(45deg, #8b0008 0 1.5px, transparent 1.5px 8px)}
-  body.accent-red .btn-hand{background:var(--edp-red);color:white}
-  body.accent-green .hatch-yellow{background-color:var(--edp-green);background-image:repeating-linear-gradient(45deg, #006a34 0 1.5px, transparent 1.5px 8px)}
-  body.accent-green .btn-hand{background:var(--edp-green);color:white}
+  body.accent-blue .hatch-yellow{background-color:var(--senai-2);background-image:repeating-linear-gradient(45deg, var(--senai) 0 1.5px, transparent 1.5px 8px)}
+  body.accent-blue .btn-hand{background:var(--senai-2);color:white}
+  body.accent-red .hatch-yellow{background-color:var(--lagoa-red);color:white;background-image:repeating-linear-gradient(45deg, #3d1019 0 1.5px, transparent 1.5px 8px)}
+  body.accent-red .btn-hand{background:var(--lagoa-red);color:white}
+  body.accent-green .hatch-yellow{background-color:var(--lagoa-olive);background-image:repeating-linear-gradient(45deg, var(--lagoa-green) 0 1.5px, transparent 1.5px 8px)}
+  body.accent-green .btn-hand{background:var(--lagoa-green);color:white}
 
   body.roughness-low .frame, body.roughness-low .sk-box, body.roughness-low .btn-hand{
     border-radius:8px !important;box-shadow:3px 3px 0 var(--ink) !important;
@@ -281,31 +280,20 @@
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 14'><path d='M0 7 L 8 3 L 16 9 L 24 4 L 32 8 L 40 3 L 48 9 L 56 5 L 64 8 L 72 3 L 80 9 L 88 4 L 96 8 L 104 3 L 112 9 L 120 4 L 128 8 L 136 3 L 144 9 L 152 5 L 160 8 L 168 3 L 176 9 L 184 4 L 192 8 L 200 5' stroke='%231a1a1a' stroke-width='1.5' fill='none'/></svg>");
     background-repeat:repeat-x;opacity:.4;
   }
-
-  /* EDP tweaks btn visible toggle */
-  #tweaks-toggle{
-    position:fixed;right:16px;bottom:16px;z-index:81;
-    font-family:"Kalam";font-weight:700;font-size:14px;
-    background:var(--edp-navy);color:white;
-    border:2px solid var(--ink);border-radius:12px;
-    padding:8px 14px;cursor:pointer;
-    box-shadow:3px 3px 0 var(--ink);
-  }
-  #tweaks.open + #tweaks-toggle, #tweaks-toggle.hidden{display:none}
 </style>
 </head>
 <body>
 
 <div class="chrome">
   <div>
-    <h1>EDP Acessos · Wireframes</h1>
-    <div class="sub">landing institucional — sistema de controlo de acessos e monitorização de eclusas</div>
+    <h1>Openmes · Wireframes</h1>
+    <div class="sub">landing institucional — SENAI × Prefeitura de Lagoa Grande × Openmes</div>
   </div>
   <div class="tabs" role="tablist">
     <button class="tab active" data-panel="p1">01 · Dashboard-First</button>
     <button class="tab" data-panel="p2">02 · Case Institucional</button>
     <button class="tab" data-panel="p3">03 · Split Editorial</button>
-    <button class="tab" data-panel="p4">04 · Visão de Eclusa</button>
+    <button class="tab" data-panel="p4">04 · Visão de Fábrica</button>
     <button class="tab" data-panel="p0">◉ visão geral</button>
   </div>
 </div>
@@ -314,11 +302,15 @@
 <section id="p0" class="panel active">
   <div class="intro">
     <div>
-      <h2>4 rascunhos para uma landing<br/>de controlo de acessos.</h2>
-      <p>O <b>EDP Acessos</b> é o protagonista — plataforma de monitorização e controlo de eclusas e pontos de acesso em tempo real. A página precisa passar <i>credibilidade técnica e operacional</i> sem parecer corporativa fria, e deixar claro o <b>posicionamento EDP</b>.</p>
-      <p>Cada aba mostra uma abordagem completa diferente — <b>desktop + mobile lado a lado</b>. Formulário de contacto presente em todas. Use os <b>Tweaks</b> (canto inferior direito) para testar a paleta.</p>
+      <h2>4 rascunhos para uma landing<br/>de gestor público.</h2>
+      <p>O <b>Openmes</b> é o protagonista — empresa de tecnologia e sistemas Indústria 4.0 — com <b>SENAI</b> e <b>Prefeitura de Lagoa Grande</b> como parceiros institucionais. A página precisa passar <i>credibilidade técnica</i> sem parecer corporativa fria, e deixar claro o <b>selo das 3 marcas</b>.</p>
+      <p>Cada aba mostra uma abordagem completa diferente — <b>desktop + mobile lado a lado</b>. Formulário de cadastro presente em todas. Use os <b>Tweaks</b> (canto inferior direito) para testar a paleta.</p>
       <div class="mini-logos">
-        <img src="Logo_EDP_Card.svg" alt="EDP"/>
+        <img src="assets/Openmes.svg" alt="Openmes"/>
+        <span style="font-family:Caveat;font-size:26px;opacity:.5">×</span>
+        <img src="assets/Senai.svg" alt="SENAI"/>
+        <span style="font-family:Caveat;font-size:26px;opacity:.5">×</span>
+        <img src="assets/Lagoa_grande.svg" alt="Prefeitura de Lagoa Grande"/>
       </div>
     </div>
     <div>
@@ -326,11 +318,11 @@
         <div class="h-hand" style="font-size:22px">Decisões transversais</div>
         <div class="squiggle"></div>
         <ul style="font-family:Kalam;font-size:14px;line-height:1.5;padding-left:18px;margin:10px 0 0">
-          <li><b>Hero</b> sempre com logótipo EDP em destaque</li>
-          <li><b>CTA único</b>: "Solicitar demonstração"</li>
-          <li>Português PT, tom técnico-institucional</li>
-          <li>Placeholders para fotos reais de instalações</li>
-          <li>Formulário de contacto no fim de todas as páginas</li>
+          <li><b>Hero</b> sempre com selo das 3 logos</li>
+          <li><b>CTA único</b>: "Solicitar apresentação"</li>
+          <li>Português BR, tom técnico-institucional</li>
+          <li>Placeholders para fotos reais de chão-de-fábrica</li>
+          <li>Cadastro no fim da página em todas</li>
         </ul>
       </div>
       <div class="note" style="margin-top:10px">* os wireframes são low-fi de propósito — a ideia é decidir <i>estrutura</i>, não acabamento.</div>
@@ -342,24 +334,24 @@
       <div class="h-hand" style="font-size:28px">O que cada opção explora</div>
       <div class="squiggle"></div>
       <ul style="font-family:Kalam;font-size:14px;line-height:1.6;padding-left:18px;margin:10px 0 0">
-        <li><b>01 · Dashboard-First</b> — o sistema (painel do EDP Acessos) aparece no hero. Mostra logo de cara o que a plataforma faz. Foco <i>demo</i>.</li>
-        <li><b>02 · Case Institucional</b> — storytelling: "instalações EDP controladas em tempo real". Construção de confiança primeiro, produto depois.</li>
+        <li><b>01 · Dashboard-First</b> — o produto (tela do Openmes) aparece no hero. Mostra logo de cara o que a plataforma faz. Foco <i>demo</i>.</li>
+        <li><b>02 · Case Institucional</b> — storytelling: "Lagoa Grande + SENAI escolheram o Openmes". Construção de confiança primeiro, produto depois.</li>
         <li><b>03 · Split Editorial</b> — layout assimétrico tipo revista, grandes títulos manuscritos. Mais personalidade, menos corporativo.</li>
-        <li><b>04 · Visão de Eclusa</b> — hero full-bleed com metáfora da eclusa; módulos do sistema apresentados como estações de controlo numa via navegável.</li>
+        <li><b>04 · Visão de Fábrica</b> — hero full-bleed com metáfora da fábrica; módulos do sistema apresentados como máquinas numa linha de produção.</li>
       </ul>
     </div>
     <div>
       <div class="h-hand" style="font-size:22px">Paleta em jogo</div>
       <div class="squiggle"></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-        <span class="chip"><span class="sw" style="background:var(--edp-navy)"></span>EDP navy</span>
-        <span class="chip"><span class="sw" style="background:var(--edp-blue)"></span>EDP azul</span>
-        <span class="chip"><span class="sw" style="background:var(--edp-red)"></span>EDP vermelho</span>
-        <span class="chip"><span class="sw" style="background:var(--edp-green)"></span>EDP verde</span>
-        <span class="chip"><span class="sw" style="background:var(--edp-light)"></span>EDP ciano</span>
-        <span class="chip"><span class="sw" style="background:var(--accent)"></span>acento amarelo</span>
+        <span class="chip"><span class="sw" style="background:var(--senai)"></span>SENAI azul</span>
+        <span class="chip"><span class="sw" style="background:var(--senai-2)"></span>SENAI cian</span>
+        <span class="chip"><span class="sw" style="background:var(--lagoa-red)"></span>Lagoa bordô</span>
+        <span class="chip"><span class="sw" style="background:var(--lagoa-green)"></span>Lagoa verde</span>
+        <span class="chip"><span class="sw" style="background:var(--lagoa-terra)"></span>Lagoa terra</span>
+        <span class="chip"><span class="sw" style="background:var(--openmes)"></span>Openmes amarelo</span>
       </div>
-      <div class="note" style="margin-top:10px">Amarelo é o <b>acento de destaque</b>; navy/vermelho/verde são apoio. Use o Tweak de "cor de acento" para testar outras hierarquias.</div>
+      <div class="note" style="margin-top:10px">Amarelo Openmes é o <b>acento de destaque</b>; azuis/bordôs/verdes são apoio. Use o Tweak de "cor de acento" para testar outras hierarquias.</div>
     </div>
   </div>
 </section>
@@ -372,7 +364,7 @@
       <div class="squiggle"></div>
     </div>
     <div class="why">
-      <b>Por quê:</b> o operador e gestor querem ver <i>o que vão ter</i>. O hero mostra o painel real do EDP Acessos com dados ao vivo das eclusas — posicionando como sistema sério e visual. Logótipo EDP como chancela de confiança no topo.
+      <b>Por quê:</b> gestor público quer ver <i>o que ele vai ter</i>. O hero mostra uma tela real do Openmes com dados de produção — já posicionando como sistema sério e visual. Selo de parceria SENAI + Prefeitura como chancela no topo.
     </div>
   </div>
 
@@ -382,85 +374,86 @@
       <div class="frame-label">desktop · 1440</div>
       <div class="bar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-        <div class="url">acessos.edp.pt</div>
+        <div class="url">openmes.com.br</div>
       </div>
 
       <!-- Nav -->
       <div style="padding:14px 22px;border-bottom:1.5px dashed var(--ink);display:flex;align-items:center;gap:16px">
-        <img src="Logo_EDP_Card.svg" style="height:26px" alt="EDP"/>
+        <img src="assets/Openmes.svg" style="height:26px"/>
         <div style="flex:1;display:flex;gap:14px;font-family:Kalam;font-size:13px;opacity:.85">
-          <span>plataforma</span><span>eclusas</span><span>monitorização</span><span>contacto</span>
+          <span>plataforma</span><span>para gestores</span><span>case Lagoa Grande</span><span>contato</span>
         </div>
         <span class="btn-hand ghost" style="font-size:13px;padding:6px 12px">entrar</span>
         <span class="btn-hand" style="font-size:13px;padding:6px 12px">solicitar demo</span>
       </div>
 
       <!-- Trust bar -->
-      <div style="padding:10px 22px;background:var(--edp-navy);border-bottom:1.5px dashed var(--ink);display:flex;align-items:center;gap:14px;justify-content:center">
-        <img src="Logo_EDP_Branco.svg" style="height:22px" alt="EDP"/>
-        <span style="color:white;font-family:Kalam;font-size:13px;opacity:.9">Sistema de Controlo de Acessos e Eclusas</span>
+      <div style="padding:10px 22px;background:var(--paper-2);border-bottom:1.5px dashed var(--ink);display:flex;align-items:center;gap:14px;justify-content:center">
+        <span class="note">em parceria com</span>
+        <img src="assets/Senai.svg" style="height:22px"/>
+        <span style="opacity:.4">·</span>
+        <img src="assets/Lagoa_grande.svg" style="height:30px"/>
       </div>
 
       <!-- Hero -->
       <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:20px;padding:24px 22px;position:relative">
         <div>
-          <div class="badge-hand">Monitorização · Tempo Real</div>
+          <div class="badge-hand">Indústria 4.0 · setor público</div>
           <div class="h-hand" style="font-size:48px;margin-top:10px">
-            Todas as eclusas<br/><span style="color:var(--edp-red)">controladas</span><br/>num só painel.
+            Chão de fábrica<br/><span style="color:var(--lagoa-red)">inteiro</span> na palma da<br/>sua gestão.
           </div>
           <div class="p-hand" style="margin-top:12px;font-size:15px;line-height:1.5;max-width:440px">
-            O EDP Acessos é o sistema que conecta eclusas, pontos de acesso e alertas operacionais — em tempo real, de qualquer dispositivo.
+            O Openmes é o sistema MES que conecta produção, manutenção e indicadores — implantado em Lagoa Grande (PE) em parceria com o SENAI.
           </div>
           <div class="flex" style="margin-top:18px">
-            <span class="btn-hand">solicitar demonstração →</span>
-            <span class="btn-hand ghost">ver funcionalidades</span>
+            <span class="btn-hand">solicitar apresentação →</span>
+            <span class="btn-hand ghost">ver o case</span>
           </div>
           <div style="margin-top:18px;display:flex;gap:14px">
-            <div><div class="h-hand" style="font-size:28px">99,2%</div><div class="note">disponibilidade</div></div>
-            <div><div class="h-hand" style="font-size:28px">24</div><div class="note">eclusas integradas</div></div>
-            <div><div class="h-hand" style="font-size:28px">24/7</div><div class="note">monitorização</div></div>
+            <div><div class="h-hand" style="font-size:28px">+38%</div><div class="note">OEE no 1º trimestre</div></div>
+            <div><div class="h-hand" style="font-size:28px">12</div><div class="note">linhas integradas</div></div>
+            <div><div class="h-hand" style="font-size:28px">24/7</div><div class="note">tempo real</div></div>
           </div>
         </div>
 
         <!-- Dashboard placeholder -->
         <div class="sk-box hatch-yellow" style="padding:0;border-width:2.5px;min-height:360px;position:relative">
-          <div style="background:var(--edp-navy);border-bottom:1.5px dashed var(--ink);padding:8px 12px;display:flex;align-items:center;gap:8px">
-            <span style="width:8px;height:8px;border-radius:50%;background:var(--edp-red);display:inline-block"></span>
-            <span style="font-family:Kalam;font-size:11px;color:white;opacity:.9">EDP Acessos · monitorização ao vivo</span>
-            <img src="Logo_EDP_Branco.svg" style="height:14px;margin-left:auto" alt="EDP"/>
+          <div style="background:var(--paper);border-bottom:1.5px dashed var(--ink);padding:8px 12px;display:flex;align-items:center;gap:8px">
+            <span class="dot" style="width:8px;height:8px;border:1.5px solid var(--ink);border-radius:50%;display:inline-block"></span>
+            <span class="note">Openmes · produção ao vivo</span>
           </div>
           <div style="padding:12px;background:var(--paper);display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div class="sk-box" style="padding:10px">
-              <div class="note">eclusas activas</div>
-              <div class="h-hand" style="font-size:32px;color:var(--edp-green)">22/24</div>
+              <div class="note">OEE linha 03</div>
+              <div class="h-hand" style="font-size:32px;color:var(--lagoa-green)">82%</div>
               <div style="height:40px;position:relative;margin-top:4px">
                 <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:100%">
-                  <path d="M0 30 L 15 26 L 25 28 L 38 18 L 50 22 L 62 12 L 75 16 L 88 8 L 100 10" stroke="var(--edp-green)" stroke-width="2" fill="none"/>
+                  <path d="M0 30 L 15 26 L 25 28 L 38 18 L 50 22 L 62 12 L 75 16 L 88 8 L 100 10" stroke="var(--lagoa-green)" stroke-width="2" fill="none"/>
                 </svg>
               </div>
             </div>
             <div class="sk-box" style="padding:10px">
-              <div class="note">acessos hoje</div>
+              <div class="note">apontamentos hoje</div>
               <div class="h-hand" style="font-size:32px">1.284</div>
               <div class="sk-line med"></div>
               <div class="sk-line short"></div>
             </div>
             <div class="sk-box" style="padding:10px;grid-column:1/3">
-              <div class="note">estado das eclusas em tempo real</div>
+              <div class="note">linhas em tempo real</div>
               <div style="display:flex;gap:6px;margin-top:6px">
-                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--edp-green)"></div>
-                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--accent)"></div>
-                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--edp-green)"></div>
-                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--edp-red)"></div>
-                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--edp-green)"></div>
-                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--edp-light)"></div>
+                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--lagoa-green)"></div>
+                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--openmes)"></div>
+                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--lagoa-green)"></div>
+                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--lagoa-red)"></div>
+                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--lagoa-green)"></div>
+                <div style="flex:1;height:28px;border:1.5px solid var(--ink);background:var(--senai-2)"></div>
               </div>
               <div style="display:flex;justify-content:space-between;margin-top:6px" class="note">
-                <span>E01</span><span>E02</span><span>E03</span><span>E04</span><span>E05</span><span>E06</span>
+                <span>L01</span><span>L02</span><span>L03</span><span>L04</span><span>L05</span><span>L06</span>
               </div>
             </div>
           </div>
-          <span class="annotation" style="right:-6px;bottom:-14px;transform:rotate(-4deg)">↑ screenshot real do sistema entra aqui</span>
+          <span class="annotation" style="right:-6px;bottom:-14px;transform:rotate(-4deg)">↑ foto real do sistema entra aqui</span>
         </div>
       </div>
 
@@ -468,52 +461,52 @@
 
       <!-- Módulos -->
       <div style="padding:22px">
-        <div class="h-hand" style="font-size:28px">Módulos da plataforma</div>
+        <div class="h-hand" style="font-size:28px">Módulos que entregamos</div>
         <div class="g4" style="margin-top:12px">
-          <div class="sk-box"><div class="h-hand" style="font-size:22px;color:var(--edp-navy)">Acessos</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
-          <div class="sk-box"><div class="h-hand" style="font-size:22px;color:var(--edp-red)">Alertas</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
-          <div class="sk-box"><div class="h-hand" style="font-size:22px;color:var(--edp-green)">Eclusas</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
-          <div class="sk-box"><div class="h-hand" style="font-size:22px">Relatórios</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:22px;color:var(--senai)">Produção</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:22px;color:var(--lagoa-red)">Qualidade</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:22px;color:var(--lagoa-green)">Manutenção</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:22px">Indicadores</div><div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div></div>
         </div>
       </div>
 
       <div class="torn"></div>
 
-      <!-- Quote -->
+      <!-- Case quote -->
       <div style="padding:22px;display:grid;grid-template-columns:2fr 1fr;gap:16px;background:var(--paper-2)">
         <div>
-          <span class="badge-hand">↘ testemunho</span>
-          <div class="h-hand" style="font-size:26px;margin-top:8px">"Em 30 dias tínhamos todas as eclusas<br/>visíveis num único ecrã." <span class="note" style="font-family:Kalam;font-weight:400">— Operador de turno, instalação EDP</span></div>
+          <span class="badge-hand">↘ case</span>
+          <div class="h-hand" style="font-size:26px;margin-top:8px">"Em 90 dias tínhamos o parque industrial<br/>inteiro no painel." <span class="note" style="font-family:Kalam;font-weight:400">— Secretaria de Desenvolvimento, Lagoa Grande</span></div>
         </div>
-        <div class="img-placeholder" style="min-height:120px">foto · operador no posto de controlo</div>
+        <div class="img-placeholder" style="min-height:120px">foto · secretário visitando fábrica</div>
       </div>
 
-      <!-- Contacto -->
+      <!-- Cadastro -->
       <div style="padding:26px 22px;border-top:2px dashed var(--ink);background:var(--paper)">
         <div class="between">
           <div>
-            <div class="h-hand" style="font-size:32px">Quer ver o EDP Acessos em acção?</div>
-            <div class="note">15 minutos. Demonstração adaptada à sua instalação.</div>
+            <div class="h-hand" style="font-size:32px">Quer ver o Openmes na sua gestão?</div>
+            <div class="note">15 minutos. Apresentação sob medida para seu município ou unidade.</div>
           </div>
-          <img src="Logo_EDP_Card.svg" style="height:34px" alt="EDP"/>
+          <img src="assets/Openmes.svg" style="height:34px"/>
         </div>
         <div class="g3" style="margin-top:14px">
-          <div class="sk-box"><div class="note">o seu nome</div><div class="sk-line" style="width:80%"></div></div>
-          <div class="sk-box"><div class="note">instalação / departamento</div><div class="sk-line" style="width:80%"></div></div>
+          <div class="sk-box"><div class="note">seu nome</div><div class="sk-line" style="width:80%"></div></div>
+          <div class="sk-box"><div class="note">órgão / empresa</div><div class="sk-line" style="width:80%"></div></div>
           <div class="sk-box"><div class="note">e-mail institucional</div><div class="sk-line" style="width:80%"></div></div>
         </div>
         <div class="flex" style="margin-top:12px;align-items:center">
-          <span class="btn-hand">solicitar demonstração →</span>
+          <span class="btn-hand">solicitar apresentação →</span>
           <span class="note">*resposta em até 48h úteis</span>
         </div>
       </div>
 
       <!-- Footer -->
-      <div style="padding:16px 22px;background:var(--edp-navy);color:white;display:flex;align-items:center;gap:14px;font-family:Kalam;font-size:13px">
-        <img src="Logo_EDP_Branco.svg" style="height:24px" alt="EDP"/>
-        <span>© EDP 2026</span>
+      <div style="padding:16px 22px;background:var(--ink);color:var(--paper);display:flex;align-items:center;gap:14px;font-family:Kalam;font-size:13px">
+        <img src="assets/Openmes.svg" style="height:24px;filter:none"/>
+        <span>© Openmes 2026</span>
         <span style="opacity:.6">·</span>
-        <span>Sistema de Controlo de Acessos e Eclusas</span>
+        <span>em parceria com SENAI e Prefeitura de Lagoa Grande</span>
         <span style="margin-left:auto;opacity:.6">privacidade · termos</span>
       </div>
     </div>
@@ -524,43 +517,45 @@
         <div class="notch"></div>
         <div class="screen">
           <div style="display:flex;align-items:center;justify-content:space-between">
-            <img src="Logo_EDP_Card.svg" style="height:22px" alt="EDP"/>
+            <img src="assets/Openmes.svg" style="height:22px"/>
             <span style="font-family:Kalam;font-size:18px">≡</span>
           </div>
-          <div style="margin-top:10px;padding:6px 8px;border:1.5px dashed var(--ink);border-radius:10px;background:var(--edp-navy)">
-            <span style="font-family:Kalam;font-size:11px;color:white;opacity:.9">Controlo de Acessos e Eclusas · EDP</span>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:6px;padding:6px 8px;border:1.5px dashed var(--ink);border-radius:10px;background:var(--paper-2)">
+            <span class="note" style="font-size:10px">parceria</span>
+            <img src="assets/Senai.svg" style="height:14px"/>
+            <img src="assets/Lagoa_grande.svg" style="height:20px"/>
           </div>
-          <div class="h-hand" style="font-size:28px;margin-top:12px">Todas as eclusas<br/><span style="color:var(--edp-red)">controladas</span><br/>num só painel.</div>
-          <div class="p-hand" style="font-size:12px;margin-top:8px">Monitorização em tempo real.</div>
+          <div class="h-hand" style="font-size:28px;margin-top:12px">Chão de fábrica<br/><span style="color:var(--lagoa-red)">inteiro</span> na palma<br/>da sua gestão.</div>
+          <div class="p-hand" style="font-size:12px;margin-top:8px">Sistema MES para indústria 4.0.</div>
 
           <div class="sk-box hatch-yellow" style="margin-top:12px;padding:0">
             <div style="background:var(--paper);padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
-              <div class="sk-box" style="padding:6px"><div class="note" style="font-size:9px">eclusas</div><div class="h-hand" style="font-size:20px;color:var(--edp-green)">22/24</div></div>
-              <div class="sk-box" style="padding:6px"><div class="note" style="font-size:9px">acessos</div><div class="h-hand" style="font-size:20px">1.2k</div></div>
+              <div class="sk-box" style="padding:6px"><div class="note" style="font-size:9px">OEE</div><div class="h-hand" style="font-size:20px;color:var(--lagoa-green)">82%</div></div>
+              <div class="sk-box" style="padding:6px"><div class="note" style="font-size:9px">aponts</div><div class="h-hand" style="font-size:20px">1.2k</div></div>
             </div>
           </div>
 
           <div class="flex" style="margin-top:12px;flex-direction:column">
             <span class="btn-hand" style="justify-content:center;font-size:13px;padding:8px 10px">solicitar demo →</span>
-            <span class="btn-hand ghost" style="justify-content:center;font-size:13px;padding:8px 10px">ver funcionalidades</span>
+            <span class="btn-hand ghost" style="justify-content:center;font-size:13px;padding:8px 10px">ver o case</span>
           </div>
 
-          <div style="margin-top:14px" class="note">↓ módulos, testemunhos, contacto</div>
+          <div style="margin-top:14px" class="note">↓ módulos, case, cadastro</div>
         </div>
       </div>
       <div class="aside" style="margin-top:20px">
         <h3>Destaque</h3>
         <div class="squiggle"></div>
         <ul>
-          <li><b>Hero = produto</b>. Dashboard ao vivo já convence.</li>
-          <li>Barra EDP navy como <b>faixa de identidade</b> no topo.</li>
-          <li>Números grandes, estado das eclusas visível.</li>
-          <li>Formulário curto (3 campos) no fim.</li>
+          <li><b>Hero = produto</b>. Dashboard fake já vende.</li>
+          <li>Parceria como <b>faixa de confiança</b> no topo.</li>
+          <li>Números grandes, tipografia manuscrita grande.</li>
+          <li>Cadastro curto (3 campos) no fim.</li>
         </ul>
         <div style="margin-top:10px">
           <span class="pill">demo-driven</span>
           <span class="pill">técnico</span>
-          <span class="pill">operacional</span>
+          <span class="pill">B2G</span>
         </div>
       </div>
     </div>
@@ -575,7 +570,7 @@
       <div class="squiggle"></div>
     </div>
     <div class="why">
-      <b>Por quê:</b> gestores decidem por <i>precedente</i>. A página abre com o storytelling "como o EDP Acessos foi implementado e funcionou". O produto aparece depois, como consequência. Mais "relatório de projecto", menos "site de SaaS".
+      <b>Por quê:</b> gestor público compra por <i>precedente</i>. A página abre com o storytelling "Lagoa Grande + SENAI implantaram, funcionou". O produto aparece depois, como consequência. Mais "relatório de projeto", menos "site de SaaS".
     </div>
   </div>
 
@@ -584,25 +579,29 @@
       <div class="frame-label">desktop · 1440</div>
       <div class="bar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-        <div class="url">acessos.edp.pt/case</div>
+        <div class="url">openmes.com.br/lagoa-grande</div>
       </div>
 
-      <!-- Hero lockup -->
-      <div style="padding:34px 22px 18px;text-align:center;background:linear-gradient(180deg,var(--edp-navy),var(--edp-navy) 60%,var(--paper))">
-        <div style="display:flex;justify-content:center">
-          <img src="Logo_EDP_Branco.svg" style="height:48px" alt="EDP"/>
+      <!-- 3-logo lockup hero -->
+      <div style="padding:34px 22px 18px;text-align:center;background:linear-gradient(180deg, var(--paper-2), var(--paper))">
+        <div class="logos-row" style="justify-content:center">
+          <img src="assets/Openmes.svg"/>
+          <span class="x">×</span>
+          <img src="assets/Senai.svg"/>
+          <span class="x">×</span>
+          <img src="assets/Lagoa_grande.svg"/>
         </div>
-        <div class="h-hand" style="font-size:54px;margin-top:18px;max-width:860px;margin-left:auto;margin-right:auto;color:white">
-          Controlo total.<br/>
-          <span style="color:var(--accent)">Eclusas</span> e acessos<br/>
-          num único sistema.
+        <div class="h-hand" style="font-size:54px;margin-top:18px;max-width:860px;margin-left:auto;margin-right:auto">
+          Quando um <span style="color:var(--lagoa-green)">município</span>, uma <span style="color:var(--senai)">escola técnica</span><br/>
+          e uma <span style="color:var(--lagoa-red)">empresa de tecnologia</span> sentam na<br/>
+          mesma mesa.
         </div>
-        <div class="p-hand" style="margin-top:10px;max-width:620px;margin-left:auto;margin-right:auto;font-size:15px;color:white;opacity:.85">
-          Um programa de digitalização operacional que colocou 24 eclusas e pontos de acesso EDP num painel unificado — em tempo real, 24/7.
+        <div class="p-hand" style="margin-top:10px;max-width:620px;margin-left:auto;margin-right:auto;font-size:15px">
+          Um programa de modernização industrial que começou em Lagoa Grande (PE) e hoje é referência em Indústria 4.0 para o setor público.
         </div>
         <div class="flex" style="justify-content:center;margin-top:18px">
-          <span class="btn-hand">ler o caso completo</span>
-          <span class="btn-hand ghost">falar com a equipa</span>
+          <span class="btn-hand">ler o relatório completo</span>
+          <span class="btn-hand ghost">falar com o time</span>
         </div>
       </div>
 
@@ -614,11 +613,11 @@
         <div style="position:relative;margin-top:18px;padding:0 10px">
           <div style="position:absolute;left:0;right:0;top:38px;height:2px;background:var(--ink);opacity:.4;border-radius:2px"></div>
           <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;position:relative">
-            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--edp-light);margin:0 auto"></div><div class="note" style="margin-top:28px">2024</div><div class="h-hand" style="font-size:18px">diagnóstico</div></div>
-            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--edp-olive);margin:0 auto"></div><div class="note" style="margin-top:28px">Q1 25</div><div class="h-hand" style="font-size:18px">piloto</div></div>
-            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--accent);margin:0 auto"></div><div class="note" style="margin-top:28px">Q2 25</div><div class="h-hand" style="font-size:18px">implantação</div></div>
-            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--edp-terra);margin:0 auto"></div><div class="note" style="margin-top:28px">Q4 25</div><div class="h-hand" style="font-size:18px">24 eclusas</div></div>
-            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--edp-red);margin:0 auto"></div><div class="note" style="margin-top:28px">hoje</div><div class="h-hand" style="font-size:18px">99,2% uptime</div></div>
+            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--senai-2);margin:0 auto"></div><div class="note" style="margin-top:28px">2024</div><div class="h-hand" style="font-size:18px">diagnóstico</div></div>
+            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--lagoa-olive);margin:0 auto"></div><div class="note" style="margin-top:28px">Q1 25</div><div class="h-hand" style="font-size:18px">piloto SENAI</div></div>
+            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--openmes);margin:0 auto"></div><div class="note" style="margin-top:28px">Q2 25</div><div class="h-hand" style="font-size:18px">implantação</div></div>
+            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--lagoa-terra);margin:0 auto"></div><div class="note" style="margin-top:28px">Q4 25</div><div class="h-hand" style="font-size:18px">4 indústrias</div></div>
+            <div style="text-align:center"><div style="width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);background:var(--lagoa-red);margin:0 auto"></div><div class="note" style="margin-top:28px">hoje</div><div class="h-hand" style="font-size:18px">+38% OEE</div></div>
           </div>
         </div>
       </div>
@@ -627,34 +626,37 @@
 
       <!-- Papéis -->
       <div style="padding:22px;background:var(--paper-2)">
-        <div class="h-hand" style="font-size:28px">Camadas do sistema</div>
+        <div class="h-hand" style="font-size:28px">Quem faz o quê</div>
         <div class="g3" style="margin-top:14px">
           <div class="sk-box">
-            <div class="h-hand" style="font-size:22px;margin-top:8px;color:var(--edp-navy)">Recolha</div>
+            <img src="assets/Openmes.svg" style="height:26px"/>
+            <div class="h-hand" style="font-size:22px;margin-top:8px">Tecnologia</div>
             <div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div>
-            <div class="note" style="margin-top:6px">sensores, leitores e hardware de campo</div>
+            <div class="note" style="margin-top:6px">plataforma MES, implantação, suporte</div>
           </div>
           <div class="sk-box">
-            <div class="h-hand" style="font-size:22px;margin-top:8px;color:var(--edp-red)">Processamento</div>
+            <img src="assets/Senai.svg" style="height:26px"/>
+            <div class="h-hand" style="font-size:22px;margin-top:8px">Capacitação</div>
             <div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div>
-            <div class="note" style="margin-top:6px">backend em tempo real, alertas automáticos</div>
+            <div class="note" style="margin-top:6px">formação técnica e operadores</div>
           </div>
           <div class="sk-box">
-            <div class="h-hand" style="font-size:22px;margin-top:8px;color:var(--edp-green)">Visualização</div>
+            <img src="assets/Lagoa_grande.svg" style="height:34px"/>
+            <div class="h-hand" style="font-size:22px;margin-top:8px">Articulação</div>
             <div class="sk-line"></div><div class="sk-line med"></div><div class="sk-line short"></div>
-            <div class="note" style="margin-top:6px">dashboards, relatórios, app móvel</div>
+            <div class="note" style="margin-top:6px">política pública, empresas locais</div>
           </div>
         </div>
       </div>
 
       <!-- Quote -->
       <div style="padding:30px 22px;display:grid;grid-template-columns:1fr 2fr;gap:20px;align-items:center">
-        <div class="img-placeholder" style="min-height:180px">foto · operador / posto de controlo</div>
+        <div class="img-placeholder" style="min-height:180px">retrato · prefeito / secretário</div>
         <div>
           <div class="h-hand" style="font-size:30px;line-height:1.15">
-            "Passámos de chamadas telefónicas para<br/>alertas automáticos — a diferença<br/>operacional foi imediata."
+            "O Openmes mostrou que indústria 4.0<br/>não é coisa de capital — é política<br/>pública que cabe no orçamento."
           </div>
-          <div class="note" style="margin-top:8px">— placeholder para testemunho do responsável de operações (a confirmar)</div>
+          <div class="note" style="margin-top:8px">— placeholder para citação do gestor (a confirmar)</div>
         </div>
       </div>
 
@@ -662,33 +664,32 @@
       <div style="padding:22px;background:var(--paper-2)">
         <div class="h-hand" style="font-size:28px">Resultados em números</div>
         <div class="g4" style="margin-top:12px">
-          <div class="sk-box"><div class="h-hand" style="font-size:40px;color:var(--edp-red)">24</div><div class="note">eclusas integradas</div></div>
-          <div class="sk-box"><div class="h-hand" style="font-size:40px;color:var(--edp-green)">99,2%</div><div class="note">disponibilidade do sistema</div></div>
-          <div class="sk-box"><div class="h-hand" style="font-size:40px;color:var(--edp-navy)">−67%</div><div class="note">tempo de resposta a incidentes</div></div>
-          <div class="sk-box"><div class="h-hand" style="font-size:40px">24/7</div><div class="note">monitorização contínua</div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:40px;color:var(--lagoa-red)">4</div><div class="note">indústrias locais integradas</div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:40px;color:var(--lagoa-green)">+38%</div><div class="note">ganho médio de OEE</div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:40px;color:var(--senai)">120</div><div class="note">técnicos formados (SENAI)</div></div>
+          <div class="sk-box"><div class="h-hand" style="font-size:40px">R$ 2,1M</div><div class="note">produtividade adicional/ano</div></div>
         </div>
       </div>
 
-      <!-- Contacto -->
+      <!-- Cadastro -->
       <div style="padding:26px 22px;border-top:2px dashed var(--ink)">
-        <div class="h-hand" style="font-size:30px">Implante este sistema na sua instalação.</div>
-        <div class="note">Agendamos uma conversa com a equipa técnica.</div>
+        <div class="h-hand" style="font-size:30px">Traga esse caso para o seu município.</div>
+        <div class="note">Agendamos uma conversa com o time técnico + secretaria de desenvolvimento.</div>
         <div class="g2" style="margin-top:14px">
           <div class="sk-box"><div class="note">nome e cargo</div><div class="sk-line" style="width:80%"></div></div>
-          <div class="sk-box"><div class="note">instalação / unidade</div><div class="sk-line" style="width:80%"></div></div>
+          <div class="sk-box"><div class="note">município / órgão</div><div class="sk-line" style="width:80%"></div></div>
           <div class="sk-box"><div class="note">e-mail institucional</div><div class="sk-line" style="width:80%"></div></div>
           <div class="sk-box"><div class="note">telefone (opcional)</div><div class="sk-line" style="width:80%"></div></div>
         </div>
-        <div class="sk-box" style="margin-top:10px;min-height:70px"><div class="note">o que gostaria de resolver? (opcional)</div></div>
+        <div class="sk-box" style="margin-top:10px;min-height:70px"><div class="note">o que você gostaria de resolver? (opcional)</div></div>
         <div class="flex" style="margin-top:12px;align-items:center">
           <span class="btn-hand">agendar conversa →</span>
-          <span class="note">ou envie para acessos@edp.pt</span>
+          <span class="note">ou envie para <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="8fece0e1fbeefbe0cfe0ffeae1e2eafca1ece0e2a1edfd">[email&#160;protected]</a></span>
         </div>
       </div>
 
-      <div style="padding:14px 22px;background:var(--edp-navy);color:white;font-family:Kalam;font-size:12px;display:flex;gap:12px;align-items:center">
-        <img src="Logo_EDP_Branco.svg" style="height:20px" alt="EDP"/>
-        <span>EDP Acessos</span>
+      <div style="padding:14px 22px;background:var(--ink);color:var(--paper);font-family:Kalam;font-size:12px;display:flex;gap:12px;align-items:center">
+        <span>Openmes</span><span style="opacity:.5">·</span><span>SENAI</span><span style="opacity:.5">·</span><span>Prefeitura de Lagoa Grande</span>
         <span style="margin-left:auto;opacity:.6">© 2026</span>
       </div>
     </div>
@@ -698,22 +699,28 @@
         <div class="notch"></div>
         <div class="screen">
           <div style="text-align:center">
-            <img src="Logo_EDP_Card.svg" style="height:28px" alt="EDP"/>
-            <div class="h-hand" style="font-size:26px;margin-top:14px;line-height:1.05">
-              Controlo total<br/>das eclusas<br/>e acessos EDP.
+            <div style="display:flex;justify-content:center;gap:6px;align-items:center">
+              <img src="assets/Openmes.svg" style="height:18px"/>
+              <span style="opacity:.4">×</span>
+              <img src="assets/Senai.svg" style="height:14px"/>
+              <span style="opacity:.4">×</span>
+              <img src="assets/Lagoa_grande.svg" style="height:22px"/>
             </div>
-            <div class="p-hand" style="font-size:11px;margin-top:6px">Digitalização operacional em tempo real.</div>
-            <div class="btn-hand" style="margin-top:12px;display:inline-flex;font-size:12px;padding:7px 12px">ver o caso →</div>
+            <div class="h-hand" style="font-size:26px;margin-top:14px;line-height:1.05">
+              Município,<br/>escola técnica e<br/>tecnologia na mesma<br/>mesa.
+            </div>
+            <div class="p-hand" style="font-size:11px;margin-top:6px">Um case de Indústria 4.0 pública.</div>
+            <div class="btn-hand" style="margin-top:12px;display:inline-flex;font-size:12px;padding:7px 12px">ler o case →</div>
           </div>
 
           <div class="torn" style="margin:16px -14px"></div>
 
           <div class="h-hand" style="font-size:18px">Resultados</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
-            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px;color:var(--edp-red)">24</div><div class="note" style="font-size:9px">eclusas</div></div>
-            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px;color:var(--edp-green)">99,2%</div><div class="note" style="font-size:9px">uptime</div></div>
-            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px;color:var(--edp-navy)">−67%</div><div class="note" style="font-size:9px">resposta</div></div>
-            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px">24/7</div><div class="note" style="font-size:9px">monit.</div></div>
+            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px;color:var(--lagoa-red)">4</div><div class="note" style="font-size:9px">indústrias</div></div>
+            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px;color:var(--lagoa-green)">+38%</div><div class="note" style="font-size:9px">OEE</div></div>
+            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px;color:var(--senai)">120</div><div class="note" style="font-size:9px">formados</div></div>
+            <div class="sk-box" style="padding:6px"><div class="h-hand" style="font-size:20px">R$2,1M</div><div class="note" style="font-size:9px">produtividade</div></div>
           </div>
         </div>
       </div>
@@ -721,15 +728,15 @@
         <h3>Destaque</h3>
         <div class="squiggle"></div>
         <ul>
-          <li><b>Caso real</b> é o herói, não a tecnologia.</li>
-          <li>Timeline, camadas claras, citação, números.</li>
-          <li>Linguagem de <b>relatório</b> — credibilidade EDP.</li>
-          <li>Formulário mais rico (5 campos + texto livre).</li>
+          <li><b>Parceria</b> é o herói, não o produto.</li>
+          <li>Timeline, papéis claros, citação, números.</li>
+          <li>Linguagem de <b>relatório</b> — credibilidade.</li>
+          <li>Cadastro mais rico (5 campos + texto livre).</li>
         </ul>
         <div style="margin-top:10px">
           <span class="pill">case-driven</span>
           <span class="pill">institucional</span>
-          <span class="pill">operacional</span>
+          <span class="pill">B2G</span>
         </div>
       </div>
     </div>
@@ -744,7 +751,7 @@
       <div class="squiggle"></div>
     </div>
     <div class="why">
-      <b>Por quê:</b> sair do modelo "SaaS padrão". Layout assimétrico, tipografia manuscrita protagonista, blocos coloridos na paleta EDP. Ideal para diferenciar o EDP Acessos de concorrentes genéricos — continua sério, mas com voz própria.
+      <b>Por quê:</b> sair do modelo "SaaS padrão". Layout assimétrico, tipografia manuscrita protagonista, blocos coloridos em cartela. Ideal se o Openmes quer se diferenciar de concorrentes genéricos e mostrar personalidade — continua sério, mas com voz.
     </div>
   </div>
 
@@ -753,25 +760,25 @@
       <div class="frame-label">desktop · 1440</div>
       <div class="bar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-        <div class="url">acessos.edp.pt</div>
+        <div class="url">openmes.com.br</div>
       </div>
 
       <!-- Asymmetric hero -->
       <div style="display:grid;grid-template-columns: 1.4fr 1fr;min-height:460px;border-bottom:2px dashed var(--ink)">
         <div style="padding:26px;position:relative">
           <div style="display:flex;align-items:center;gap:10px">
-            <img src="Logo_EDP_Card.svg" style="height:28px" alt="EDP"/>
-            <span class="note" style="margin-left:auto">controlo de acessos e eclusas</span>
+            <img src="assets/Openmes.svg" style="height:28px"/>
+            <span class="note" style="margin-left:auto">indústria 4.0 para o setor público</span>
           </div>
           <div class="h-hand" style="font-size:92px;line-height:.9;margin-top:20px">
-            A eclusa<br/><span style="color:var(--edp-red)">fala.</span>
+            Sua<br/>fábrica<br/><span style="color:var(--lagoa-red)">fala.</span>
           </div>
           <div class="h-hand" style="font-size:92px;line-height:.9;color:var(--ink);opacity:.15;margin-top:-78px;margin-left:40px">
-            A gente<br/>ouve.
+            A gente<br/>traduz.
           </div>
-          <div class="h-hand" style="font-size:32px;margin-top:20px">A gente ouve.</div>
+          <div class="h-hand" style="font-size:32px;margin-top:20px">A gente traduz.</div>
           <div class="p-hand" style="font-size:16px;max-width:440px;margin-top:14px">
-            EDP Acessos transforma sensores, leitores e eventos operacionais em decisões rápidas de gestão. Em tempo real, de qualquer dispositivo.
+            Openmes transforma máquinas, pessoas e apontamentos em decisões de gestão. Implantado em Lagoa Grande (PE) com SENAI.
           </div>
           <div class="flex" style="margin-top:20px">
             <span class="btn-hand">solicitar demo →</span>
@@ -780,97 +787,99 @@
         </div>
         <div class="hatch-yellow" style="position:relative;border-left:2px dashed var(--ink)">
           <div class="img-placeholder" style="position:absolute;inset:22px;background:rgba(255,255,255,.7);border-radius:6px">
-            foto vertical · operador c/ tablet numa eclusa
+            foto vertical · operadora c/ tablet no chão de fábrica
           </div>
           <span class="annotation" style="left:14px;top:-4px;transform:rotate(-4deg);background:var(--paper);padding:2px 6px;border:1.5px solid var(--ink);border-radius:6px">foto real aqui ↓</span>
         </div>
       </div>
 
       <!-- Trust strip -->
-      <div style="padding:14px 22px;display:flex;align-items:center;gap:16px;border-bottom:2px dashed var(--ink);background:var(--edp-navy)">
-        <img src="Logo_EDP_Branco.svg" style="height:26px" alt="EDP"/>
-        <span style="color:white;font-family:Kalam;font-size:14px">Sistema de Controlo de Acessos e Eclusas</span>
-        <span style="margin-left:auto;color:white;opacity:.6" class="note">desde 2024</span>
+      <div style="padding:14px 22px;display:flex;align-items:center;gap:16px;border-bottom:2px dashed var(--ink)">
+        <span class="note">uma parceria</span>
+        <img src="assets/Senai.svg" style="height:26px"/>
+        <span style="opacity:.3">·</span>
+        <img src="assets/Lagoa_grande.svg" style="height:36px"/>
+        <span style="margin-left:auto" class="note">desde 2024</span>
       </div>
 
       <!-- Manifesto cards -->
       <div style="padding:26px 22px">
-        <div class="h-hand" style="font-size:32px">O que o EDP Acessos garante</div>
+        <div class="h-hand" style="font-size:32px">O que o Openmes acredita</div>
         <div class="g3" style="margin-top:16px">
-          <div class="sk-box" style="background:var(--edp-light);color:white;border-color:var(--ink)">
+          <div class="sk-box" style="background:var(--senai-2);color:white;border-color:var(--ink)">
             <div class="h-hand" style="font-size:52px;line-height:1">01</div>
-            <div class="h-hand" style="font-size:22px;margin-top:6px">Acesso não é<br/>apenas uma porta.</div>
-            <div class="p-hand" style="font-size:13px;margin-top:8px">Cada entrada é um dado — rastreável, auditável e accionável em tempo real.</div>
+            <div class="h-hand" style="font-size:22px;margin-top:6px">Dado bruto<br/>não decide.</div>
+            <div class="p-hand" style="font-size:13px;margin-top:8px">Painéis que cabem na rotina de quem opera — não só de quem audita.</div>
           </div>
-          <div class="sk-box" style="background:var(--edp-red);color:white;border-color:var(--ink)">
+          <div class="sk-box" style="background:var(--lagoa-red);color:white;border-color:var(--ink)">
             <div class="h-hand" style="font-size:52px;line-height:1">02</div>
-            <div class="h-hand" style="font-size:22px;margin-top:6px">Segurança começa<br/>nos dados.</div>
-            <div class="p-hand" style="font-size:13px;margin-top:8px">Alertas automáticos antes de qualquer incidente chegar ao operador humano.</div>
+            <div class="h-hand" style="font-size:22px;margin-top:6px">Indústria 4.0<br/>é política pública.</div>
+            <div class="p-hand" style="font-size:13px;margin-top:8px">Municípios pequenos podem — e devem — ter parque industrial moderno.</div>
           </div>
-          <div class="sk-box" style="background:var(--accent);border-color:var(--ink)">
+          <div class="sk-box" style="background:var(--openmes);border-color:var(--ink)">
             <div class="h-hand" style="font-size:52px;line-height:1">03</div>
-            <div class="h-hand" style="font-size:22px;margin-top:6px">Instalação rápida,<br/>sem disrupção.</div>
-            <div class="p-hand" style="font-size:13px;margin-top:8px">Do diagnóstico ao primeiro painel ao vivo: 30 dias, não 3 meses.</div>
+            <div class="h-hand" style="font-size:22px;margin-top:6px">Implantação<br/>se mede em semanas.</div>
+            <div class="p-hand" style="font-size:13px;margin-top:8px">Do diagnóstico ao primeiro painel ao vivo: 90 dias, não 3 anos.</div>
           </div>
         </div>
       </div>
 
       <!-- Big number pull -->
       <div style="padding:30px 22px;background:var(--paper-2);border-top:2px dashed var(--ink);border-bottom:2px dashed var(--ink);display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center">
-        <div class="h-hand" style="font-size:140px;line-height:.9;color:var(--edp-red)">−67%</div>
+        <div class="h-hand" style="font-size:140px;line-height:.9;color:var(--lagoa-red)">+38%</div>
         <div>
-          <div class="h-hand" style="font-size:28px">no tempo de resposta a incidentes</div>
-          <div class="p-hand" style="font-size:14px;margin-top:6px;max-width:480px">Nas instalações integradas no programa, no primeiro trimestre de operação com o EDP Acessos.</div>
+          <div class="h-hand" style="font-size:28px">de ganho médio de OEE</div>
+          <div class="p-hand" style="font-size:14px;margin-top:6px;max-width:480px">Nas 4 indústrias participantes do programa em Lagoa Grande, no primeiro trimestre de operação.</div>
           <div style="margin-top:10px">
-            <span class="chip"><span class="sw" style="background:var(--edp-red)"></span>Alertas críticos</span>
-            <span class="chip"><span class="sw" style="background:var(--edp-green)"></span>Eclusas activas</span>
-            <span class="chip"><span class="sw" style="background:var(--edp-navy)"></span>Relatórios</span>
-            <span class="chip"><span class="sw" style="background:var(--accent)"></span>Auditoria</span>
+            <span class="chip"><span class="sw" style="background:var(--lagoa-red)"></span>Metalúrgica A</span>
+            <span class="chip"><span class="sw" style="background:var(--lagoa-olive)"></span>Alimentos B</span>
+            <span class="chip"><span class="sw" style="background:var(--senai)"></span>Cerâmica C</span>
+            <span class="chip"><span class="sw" style="background:var(--openmes)"></span>Têxtil D</span>
           </div>
         </div>
       </div>
 
-      <!-- Módulos -->
+      <!-- Módulos em lista editorial -->
       <div style="padding:26px 22px">
         <div class="between">
-          <div class="h-hand" style="font-size:32px">Onde o EDP Acessos entra</div>
-          <span class="note">acessos · alertas · eclusas · relatórios</span>
+          <div class="h-hand" style="font-size:32px">Onde o Openmes entra</div>
+          <span class="note">produção · qualidade · manutenção · indicadores</span>
         </div>
         <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:0">
           <div class="sk-box" style="border-radius:0;border-right:none;border-bottom:none">
-            <div class="h-hand" style="font-size:24px;color:var(--edp-navy)">01 · Acessos</div>
-            <div class="p-hand" style="font-size:13px;margin-top:4px">Registo em tempo real, controlo por perfil, histórico completo de entradas e saídas.</div>
+            <div class="h-hand" style="font-size:24px;color:var(--senai)">01 · Produção</div>
+            <div class="p-hand" style="font-size:13px;margin-top:4px">Apontamento em tempo real, OEE por linha, motivos de parada classificados.</div>
           </div>
           <div class="sk-box" style="border-radius:0;border-bottom:none">
-            <div class="h-hand" style="font-size:24px;color:var(--edp-red)">02 · Alertas</div>
-            <div class="p-hand" style="font-size:13px;margin-top:4px">Notificações automáticas, escalonamento de incidentes, integração com equipas de turno.</div>
+            <div class="h-hand" style="font-size:24px;color:var(--lagoa-red)">02 · Qualidade</div>
+            <div class="p-hand" style="font-size:13px;margin-top:4px">Coletas, CEP, análise de refugo e rastreabilidade por lote.</div>
           </div>
           <div class="sk-box" style="border-radius:0;border-right:none">
-            <div class="h-hand" style="font-size:24px;color:var(--edp-green)">03 · Eclusas</div>
-            <div class="p-hand" style="font-size:13px;margin-top:4px">Estado em tempo real, histórico de operações, manutenção preventiva e MTBF.</div>
+            <div class="h-hand" style="font-size:24px;color:var(--lagoa-green)">03 · Manutenção</div>
+            <div class="p-hand" style="font-size:13px;margin-top:4px">Ordens preventivas, preditivo com sensores, MTBF / MTTR.</div>
           </div>
           <div class="sk-box" style="border-radius:0">
-            <div class="h-hand" style="font-size:24px">04 · Relatórios</div>
-            <div class="p-hand" style="font-size:13px;margin-top:4px">Painéis executivos, exportação para auditoria, KPIs de disponibilidade e segurança.</div>
+            <div class="h-hand" style="font-size:24px">04 · Indicadores</div>
+            <div class="p-hand" style="font-size:13px;margin-top:4px">Painéis executivos para gestor público e para direção fabril.</div>
           </div>
         </div>
       </div>
 
-      <!-- Contacto escuro -->
-      <div style="padding:26px 22px;background:var(--edp-navy);color:white">
+      <!-- Cadastro -->
+      <div style="padding:26px 22px;background:var(--ink);color:var(--paper)">
         <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:20px;align-items:start">
           <div>
-            <div class="h-hand" style="font-size:42px;line-height:1">Fale com<br/>a equipa.</div>
-            <div class="note" style="color:white;opacity:.7">Retorno em até 48h. Sem comercial, só engenharia.</div>
-            <div style="margin-top:14px;opacity:.8" class="note">acessos@edp.pt · +351 xxx xxx xxx</div>
+            <div class="h-hand" style="font-size:42px;line-height:1">Converse<br/>com o time.</div>
+            <div class="note" style="color:var(--paper);opacity:.7">Retorno em até 48h. Sem vendedor, só engenharia.</div>
+            <div style="margin-top:14px;opacity:.8" class="note"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="83e0ecedf7e2f7ecc3ecf3e6edeee6f0ade0eceeade1f1">[email&#160;protected]</a> · +55 (xx) xxxx-xxxx</div>
           </div>
           <div>
             <div class="g2">
-              <div class="sk-box" style="background:transparent;border-color:white"><div class="note" style="color:white;opacity:.6">nome</div><div class="sk-line" style="background:white;opacity:.6;width:80%"></div></div>
-              <div class="sk-box" style="background:transparent;border-color:white"><div class="note" style="color:white;opacity:.6">instalação</div><div class="sk-line" style="background:white;opacity:.6;width:80%"></div></div>
-              <div class="sk-box" style="background:transparent;border-color:white;grid-column:1/3"><div class="note" style="color:white;opacity:.6">e-mail institucional</div><div class="sk-line" style="background:white;opacity:.6;width:80%"></div></div>
+              <div class="sk-box" style="background:transparent;border-color:var(--paper)"><div class="note" style="color:var(--paper);opacity:.6">nome</div><div class="sk-line" style="background:var(--paper);opacity:.6;width:80%"></div></div>
+              <div class="sk-box" style="background:transparent;border-color:var(--paper)"><div class="note" style="color:var(--paper);opacity:.6">órgão</div><div class="sk-line" style="background:var(--paper);opacity:.6;width:80%"></div></div>
+              <div class="sk-box" style="background:transparent;border-color:var(--paper);grid-column:1/3"><div class="note" style="color:var(--paper);opacity:.6">e-mail institucional</div><div class="sk-line" style="background:var(--paper);opacity:.6;width:80%"></div></div>
             </div>
-            <div style="margin-top:10px"><span class="btn-hand" style="background:var(--accent)">enviar →</span></div>
+            <div style="margin-top:10px"><span class="btn-hand" style="background:var(--openmes)">enviar →</span></div>
           </div>
         </div>
       </div>
@@ -881,20 +890,20 @@
         <div class="notch"></div>
         <div class="screen">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <img src="Logo_EDP_Card.svg" style="height:20px" alt="EDP"/>
+            <img src="assets/Openmes.svg" style="height:20px"/>
             <span class="note" style="font-size:10px">≡</span>
           </div>
-          <div class="h-hand" style="font-size:56px;line-height:.9;margin-top:16px">A eclusa<br/><span style="color:var(--edp-red)">fala.</span></div>
-          <div class="h-hand" style="font-size:22px;margin-top:8px">A gente ouve.</div>
-          <div class="p-hand" style="font-size:11px;margin-top:6px">Controlo de acessos e eclusas EDP em tempo real.</div>
+          <div class="h-hand" style="font-size:56px;line-height:.9;margin-top:16px">Sua<br/>fábrica<br/><span style="color:var(--lagoa-red)">fala.</span></div>
+          <div class="h-hand" style="font-size:22px;margin-top:8px">A gente traduz.</div>
+          <div class="p-hand" style="font-size:11px;margin-top:6px">MES para gestão pública — com SENAI e Prefeitura de Lagoa Grande.</div>
 
           <div class="img-placeholder hatch-yellow" style="height:140px;margin-top:10px;border-radius:6px">foto vertical</div>
 
-          <div class="sk-box" style="background:var(--edp-red);color:white;margin-top:10px;padding:8px">
-            <div class="h-hand" style="font-size:16px">01 · Acesso não é apenas uma porta.</div>
+          <div class="sk-box" style="background:var(--lagoa-red);color:white;margin-top:10px;padding:8px">
+            <div class="h-hand" style="font-size:16px">01 · Dado bruto não decide.</div>
           </div>
-          <div class="sk-box" style="background:var(--accent);margin-top:6px;padding:8px">
-            <div class="h-hand" style="font-size:16px">02 · Instalação em 30 dias.</div>
+          <div class="sk-box" style="background:var(--openmes);margin-top:6px;padding:8px">
+            <div class="h-hand" style="font-size:16px">02 · Implantação em 90 dias.</div>
           </div>
 
           <div style="margin-top:10px"><span class="btn-hand" style="font-size:12px;padding:7px 12px">demo →</span></div>
@@ -905,9 +914,9 @@
         <div class="squiggle"></div>
         <ul>
           <li>Layout <b>assimétrico</b>, mais voz.</li>
-          <li>Cartelas de cor usando toda a paleta EDP.</li>
+          <li>Cartelas de cor usando todas as 3 paletas.</li>
           <li>Número gigante como <b>pull quote</b>.</li>
-          <li>Contacto em secção escura navy — contraste forte.</li>
+          <li>Cadastro em seção escura — contraste forte.</li>
         </ul>
         <div style="margin-top:10px">
           <span class="pill">editorial</span>
@@ -919,15 +928,15 @@
   </div>
 </section>
 
-<!-- ========== PANEL 4 — VISÃO DE ECLUSA ========== -->
+<!-- ========== PANEL 4 — VISÃO DE FÁBRICA ========== -->
 <section id="p4" class="panel">
   <div class="panel-head">
     <div>
-      <h2>04 · Visão de Eclusa</h2>
+      <h2>04 · Visão de Fábrica</h2>
       <div class="squiggle"></div>
     </div>
     <div class="why">
-      <b>Por quê:</b> metáfora visual: a página <i>é</i> um canal com eclusas. Hero full-bleed com cena de instalação, módulos do sistema apresentados como comportas de controlo. Directo para quem vem do mundo operacional da EDP.
+      <b>Por quê:</b> metáfora visual: a página <i>é</i> uma linha de produção. Hero full-bleed com cena de fábrica, módulos do sistema apresentados como estações da linha, indicadores dispostos como esteira. Bem direto para quem vem do mundo industrial.
     </div>
   </div>
 
@@ -936,88 +945,86 @@
       <div class="frame-label">desktop · 1440</div>
       <div class="bar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-        <div class="url">acessos.edp.pt</div>
+        <div class="url">openmes.com.br</div>
       </div>
 
       <!-- Full-bleed hero -->
-      <div style="position:relative;min-height:420px;background:var(--edp-navy);color:white;overflow:hidden">
-        <!-- sketchy canal/eclusa silhouette -->
+      <div style="position:relative;min-height:420px;background:var(--ink);color:var(--paper);overflow:hidden">
+        <!-- sketchy factory silhouette -->
         <svg viewBox="0 0 1400 420" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;opacity:.5">
           <defs>
-            <pattern id="grid2" width="30" height="30" patternUnits="userSpaceOnUse">
-              <path d="M30 0 L 0 0 0 30" stroke="rgba(251,249,244,.1)" stroke-width=".5" fill="none"/>
+            <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+              <path d="M30 0 L 0 0 0 30" stroke="rgba(251,249,244,.15)" stroke-width=".5" fill="none"/>
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#grid2)"/>
-          <!-- canal sketch -->
-          <path d="M 0 200 L 1400 200" stroke="rgba(77,174,229,.3)" stroke-width="60" fill="none"/>
-          <!-- eclusa gates sketch -->
-          <rect x="200" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <rect x="230" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <rect x="550" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <rect x="580" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <rect x="900" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <rect x="930" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <rect x="1200" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <rect x="1230" y="170" width="12" height="80" fill="rgba(251,249,244,.4)" rx="3"/>
-          <!-- flow arrow -->
-          <line x1="0" y1="370" x2="1400" y2="370" stroke="var(--accent)" stroke-width="3" stroke-dasharray="12 6"/>
+          <rect width="100%" height="100%" fill="url(#grid)"/>
+          <!-- factory sketch -->
+          <path d="M 0 330 L 120 330 L 120 240 L 220 280 L 220 230 L 320 270 L 320 220 L 420 260 L 420 330 L 700 330 L 700 180 L 780 180 L 780 150 L 860 150 L 860 180 L 940 180 L 940 330 L 1400 330 L 1400 420 L 0 420 Z" fill="rgba(250,204,21,.1)" stroke="rgba(251,249,244,.5)" stroke-width="1.5"/>
+          <!-- chimneys smoke -->
+          <circle cx="760" cy="100" r="18" fill="rgba(251,249,244,.1)"/>
+          <circle cx="790" cy="80" r="22" fill="rgba(251,249,244,.08)"/>
+          <circle cx="830" cy="105" r="16" fill="rgba(251,249,244,.1)"/>
+          <!-- conveyor line -->
+          <line x1="0" y1="370" x2="1400" y2="370" stroke="var(--openmes)" stroke-width="3" stroke-dasharray="12 6"/>
         </svg>
         <div style="position:relative;padding:34px 22px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start">
           <div>
             <div style="display:flex;gap:10px;align-items:center">
-              <img src="Logo_EDP_Branco.svg" style="height:26px" alt="EDP"/>
-              <span class="badge-hand" style="background:transparent;color:white;border-color:rgba(255,255,255,.6)">Controlo de Acessos · Eclusas</span>
+              <img src="assets/Openmes.svg" style="height:26px"/>
+              <span class="badge-hand" style="background:transparent;color:var(--paper);border-color:var(--paper)">Indústria 4.0 · B2G</span>
             </div>
             <div class="h-hand" style="font-size:72px;line-height:.95;margin-top:18px;max-width:720px">
-              O canal que<br/>nunca para de<br/><span style="color:var(--accent)">comunicar.</span>
+              A linha de<br/>produção que<br/><span style="color:var(--openmes)">pensa junto.</span>
             </div>
             <div class="p-hand" style="font-size:15px;max-width:520px;margin-top:14px;opacity:.9">
-              EDP Acessos é o sistema que dá voz às eclusas e pontos de acesso. Monitorização contínua, alertas automáticos e relatórios em tempo real.
+              Openmes é o MES que dá voz ao chão de fábrica. Implantado em Lagoa Grande (PE) em parceria com o SENAI — e pronto para o seu município.
             </div>
           </div>
           <div style="text-align:right">
             <div style="display:flex;gap:10px;align-items:center;background:rgba(251,249,244,.08);border:1.5px dashed rgba(251,249,244,.5);border-radius:10px;padding:8px 12px">
-              <span style="font-family:Kalam;font-size:12px;color:white;opacity:.8">Sistema certificado EDP</span>
+              <img src="assets/Senai.svg" style="height:18px;filter:invert(1) brightness(2)"/>
+              <span style="opacity:.5">·</span>
+              <img src="assets/Lagoa_grande.svg" style="height:26px;filter:invert(1) brightness(2)"/>
             </div>
+            <div class="note" style="color:var(--paper);opacity:.6;margin-top:6px">selo de parceria</div>
           </div>
         </div>
         <div style="position:relative;padding:0 22px 26px;display:flex;gap:10px">
-          <span class="btn-hand">ver sistema em operação →</span>
-          <span class="btn-hand ghost" style="background:transparent;color:white;border-color:white">falar com a equipa</span>
+          <span class="btn-hand">ver a linha em operação →</span>
+          <span class="btn-hand ghost" style="background:transparent;color:var(--paper);border-color:var(--paper)">falar com engenharia</span>
         </div>
       </div>
 
-      <!-- Módulos como comportas -->
+      <!-- Conveyor belt modules -->
       <div style="padding:24px 22px;position:relative">
-        <div class="h-hand" style="font-size:28px">Comportas do sistema</div>
-        <div class="note">cada módulo é uma comporta — instale todo o sistema ou só o que precisa</div>
+        <div class="h-hand" style="font-size:28px">Estações da linha</div>
+        <div class="note">cada módulo é uma estação — instale toda a linha ou só uma peça</div>
         <div style="margin-top:18px;position:relative">
-          <!-- canal strip -->
-          <div style="position:absolute;left:0;right:0;top:50%;height:14px;background:var(--edp-light);border-radius:4px;transform:translateY(-50%);opacity:.4;
-                      background-image:repeating-linear-gradient(90deg, var(--accent) 0 14px, var(--edp-light) 14px 28px)"></div>
+          <!-- belt -->
+          <div style="position:absolute;left:0;right:0;top:50%;height:14px;background:var(--ink);border-radius:4px;transform:translateY(-50%);
+                      background-image:repeating-linear-gradient(90deg, var(--openmes) 0 14px, var(--ink) 14px 28px)"></div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;position:relative">
-            <div class="sk-box" style="background:var(--edp-navy);color:white;border-color:var(--ink)">
-              <div class="badge-hand" style="font-size:10px;background:white;color:var(--ink)">comporta 01</div>
-              <div class="h-hand" style="font-size:22px;margin-top:6px">Acessos</div>
+            <div class="sk-box" style="background:var(--senai-2);color:white;border-color:var(--ink)">
+              <div class="badge-hand" style="font-size:10px;background:white;color:var(--ink)">estação 01</div>
+              <div class="h-hand" style="font-size:22px;margin-top:6px">Produção</div>
               <div class="sk-line" style="background:white"></div>
               <div class="sk-line med" style="background:white"></div>
             </div>
-            <div class="sk-box" style="background:var(--edp-red);color:white;border-color:var(--ink)">
-              <div class="badge-hand" style="font-size:10px;background:white;color:var(--ink)">comporta 02</div>
-              <div class="h-hand" style="font-size:22px;margin-top:6px">Alertas</div>
+            <div class="sk-box" style="background:var(--lagoa-red);color:white;border-color:var(--ink)">
+              <div class="badge-hand" style="font-size:10px;background:white;color:var(--ink)">estação 02</div>
+              <div class="h-hand" style="font-size:22px;margin-top:6px">Qualidade</div>
               <div class="sk-line" style="background:white"></div>
               <div class="sk-line med" style="background:white"></div>
             </div>
-            <div class="sk-box" style="background:var(--edp-green);color:white;border-color:var(--ink)">
-              <div class="badge-hand" style="font-size:10px;background:white;color:var(--ink)">comporta 03</div>
-              <div class="h-hand" style="font-size:22px;margin-top:6px">Eclusas</div>
+            <div class="sk-box" style="background:var(--lagoa-green);color:white;border-color:var(--ink)">
+              <div class="badge-hand" style="font-size:10px;background:white;color:var(--ink)">estação 03</div>
+              <div class="h-hand" style="font-size:22px;margin-top:6px">Manutenção</div>
               <div class="sk-line" style="background:white"></div>
               <div class="sk-line med" style="background:white"></div>
             </div>
-            <div class="sk-box" style="background:var(--accent);border-color:var(--ink)">
-              <div class="badge-hand" style="font-size:10px">comporta 04</div>
-              <div class="h-hand" style="font-size:22px;margin-top:6px">Relatórios</div>
+            <div class="sk-box" style="background:var(--openmes);border-color:var(--ink)">
+              <div class="badge-hand" style="font-size:10px">estação 04</div>
+              <div class="h-hand" style="font-size:22px;margin-top:6px">Indicadores</div>
               <div class="sk-line"></div>
               <div class="sk-line med"></div>
             </div>
@@ -1030,55 +1037,55 @@
       <!-- Live feed mock -->
       <div style="padding:22px;display:grid;grid-template-columns:2fr 1fr;gap:20px">
         <div class="sk-box" style="padding:0">
-          <div style="padding:10px 14px;border-bottom:1.5px dashed var(--ink);display:flex;align-items:center;gap:8px;background:var(--edp-navy)">
-            <span style="width:10px;height:10px;background:var(--edp-red);border-radius:50%;display:inline-block"></span>
-            <span class="h-hand" style="font-size:18px;color:white">feed ao vivo · instalações EDP</span>
-            <span class="note" style="margin-left:auto;color:white;opacity:.7">14:32</span>
+          <div style="padding:10px 14px;border-bottom:1.5px dashed var(--ink);display:flex;align-items:center;gap:8px;background:var(--paper-2)">
+            <span class="dot" style="background:var(--lagoa-red);border-radius:50%;display:inline-block"></span>
+            <span class="h-hand" style="font-size:18px">feed ao vivo · Lagoa Grande</span>
+            <span class="note" style="margin-left:auto">14:32</span>
           </div>
           <div style="padding:14px;display:grid;gap:8px">
-            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--edp-green);color:white">OK</span><span class="p-hand" style="font-size:13px">Eclusa E01 · acesso autorizado · Operador #4218</span></div>
-            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--accent)">AVISO</span><span class="p-hand" style="font-size:13px">Eclusa E03 · tentativa de acesso negado · 14:31</span></div>
-            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--edp-green);color:white">OK</span><span class="p-hand" style="font-size:13px">Eclusa E04 · manutenção concluída · retorno ao serviço</span></div>
-            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--edp-red);color:white">ALERTA</span><span class="p-hand" style="font-size:13px">Ponto P07 · sensor offline · técnico notificado</span></div>
-            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--edp-light);color:white">INFO</span><span class="p-hand" style="font-size:13px">Relatório diário gerado · 24 eclusas · 1.284 acessos</span></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--lagoa-green);color:white">OK</span><span class="p-hand" style="font-size:13px">Linha 01 · setup concluído · 14 min</span></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--openmes)">ALERT</span><span class="p-hand" style="font-size:13px">Linha 03 · micro-parada · 2min 18s</span></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--lagoa-green);color:white">OK</span><span class="p-hand" style="font-size:13px">Linha 04 · meta diária atingida (107%)</span></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--lagoa-red);color:white">STOP</span><span class="p-hand" style="font-size:13px">Linha 05 · parada não prog. · troca ferramenta</span></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="chip" style="background:var(--senai-2);color:white">SENAI</span><span class="p-hand" style="font-size:13px">Turma 07 de operadores concluída · 18 formados</span></div>
           </div>
         </div>
         <div>
-          <div class="h-hand" style="font-size:24px">Por que os gestores preferem</div>
+          <div class="h-hand" style="font-size:24px">Por que gestor público gosta</div>
           <div class="squiggle"></div>
           <ul style="font-family:Kalam;font-size:14px;padding-left:18px;margin-top:8px;line-height:1.5">
-            <li>Painel unificado por instalação</li>
-            <li>Alertas sem intervenção manual</li>
-            <li>Histórico completo para auditoria</li>
-            <li>Acesso por qualquer dispositivo</li>
+            <li>Painel consolidado por município</li>
+            <li>Integração com SENAI (formação)</li>
+            <li>Métricas para prestar contas</li>
+            <li>Indústrias locais no mesmo lugar</li>
           </ul>
         </div>
       </div>
 
-      <!-- Contacto tipo ficha de acesso -->
+      <!-- Cadastro tipo ficha de produção -->
       <div style="padding:26px 22px;background:var(--paper-2);border-top:2px dashed var(--ink)">
         <div class="between">
-          <div class="h-hand" style="font-size:32px">Ficha de contacto</div>
+          <div class="h-hand" style="font-size:32px">Ficha de contato</div>
           <span class="note">* preencha para agendar visita técnica</span>
         </div>
         <div style="margin-top:14px;border:2px solid var(--ink);border-radius:8px;overflow:hidden;background:var(--paper)">
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:2px solid var(--ink)">
             <div style="padding:12px;border-right:2px solid var(--ink)"><div class="note">nome</div><div class="sk-line" style="width:80%"></div></div>
             <div style="padding:12px;border-right:2px solid var(--ink)"><div class="note">cargo</div><div class="sk-line" style="width:80%"></div></div>
-            <div style="padding:12px"><div class="note">instalação / unidade</div><div class="sk-line" style="width:80%"></div></div>
+            <div style="padding:12px"><div class="note">órgão / município</div><div class="sk-line" style="width:80%"></div></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:2px solid var(--ink)">
             <div style="padding:12px;border-right:2px solid var(--ink)"><div class="note">e-mail</div><div class="sk-line" style="width:80%"></div></div>
             <div style="padding:12px"><div class="note">telefone</div><div class="sk-line" style="width:80%"></div></div>
           </div>
           <div style="padding:12px">
-            <div class="note">que comporta te interessa?</div>
+            <div class="note">qual estação te interessa?</div>
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-              <span class="chip">acessos</span>
-              <span class="chip">alertas</span>
-              <span class="chip">eclusas</span>
-              <span class="chip">relatórios</span>
-              <span class="chip">sistema completo</span>
+              <span class="chip">produção</span>
+              <span class="chip">qualidade</span>
+              <span class="chip">manutenção</span>
+              <span class="chip">indicadores</span>
+              <span class="chip">a linha toda</span>
             </div>
           </div>
         </div>
@@ -1088,10 +1095,10 @@
         </div>
       </div>
 
-      <div style="padding:14px 22px;background:var(--edp-navy);color:white;display:flex;gap:12px;font-family:Kalam;font-size:12px;align-items:center">
-        <img src="Logo_EDP_Branco.svg" style="height:22px" alt="EDP"/>
-        <span>EDP Acessos · © 2026</span>
-        <span style="margin-left:auto;opacity:.6">Sistema de Controlo de Eclusas e Acessos</span>
+      <div style="padding:14px 22px;background:var(--ink);color:var(--paper);display:flex;gap:12px;font-family:Kalam;font-size:12px;align-items:center">
+        <img src="assets/Openmes.svg" style="height:22px"/>
+        <span>© 2026</span>
+        <span style="margin-left:auto;opacity:.6">com SENAI · Prefeitura de Lagoa Grande</span>
       </div>
     </div>
 
@@ -1099,26 +1106,26 @@
       <div class="mob">
         <div class="notch"></div>
         <div class="screen" style="padding:0">
-          <div style="background:var(--edp-navy);color:white;padding:14px;position:relative;overflow:hidden">
-            <img src="Logo_EDP_Branco.svg" style="height:22px" alt="EDP"/>
-            <div class="h-hand" style="font-size:36px;line-height:1;margin-top:14px">O canal que<br/><span style="color:var(--accent)">nunca para</span><br/>de falar.</div>
-            <div class="p-hand" style="font-size:11px;opacity:.8;margin-top:6px">EDP Acessos · controlo de eclusas</div>
-            <div style="position:absolute;right:-10px;bottom:-10px;width:80px;height:8px;background:var(--accent);transform:rotate(-8deg)"></div>
+          <div style="background:var(--ink);color:var(--paper);padding:14px;position:relative;overflow:hidden">
+            <img src="assets/Openmes.svg" style="height:22px"/>
+            <div class="h-hand" style="font-size:36px;line-height:1;margin-top:14px">A linha<br/>que <span style="color:var(--openmes)">pensa</span><br/>junto.</div>
+            <div class="p-hand" style="font-size:11px;opacity:.8;margin-top:6px">Openmes · MES para o setor público</div>
+            <div style="position:absolute;right:-10px;bottom:-10px;width:80px;height:8px;background:var(--openmes);transform:rotate(-8deg)"></div>
           </div>
           <div style="padding:10px">
-            <div class="note">comportas</div>
+            <div class="note">estações</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
-              <div class="sk-box" style="background:var(--edp-navy);color:white;padding:6px"><div class="h-hand" style="font-size:14px">01 Acessos</div></div>
-              <div class="sk-box" style="background:var(--edp-red);color:white;padding:6px"><div class="h-hand" style="font-size:14px">02 Alertas</div></div>
-              <div class="sk-box" style="background:var(--edp-green);color:white;padding:6px"><div class="h-hand" style="font-size:14px">03 Eclusas</div></div>
-              <div class="sk-box" style="background:var(--accent);padding:6px"><div class="h-hand" style="font-size:14px">04 Relat.</div></div>
+              <div class="sk-box" style="background:var(--senai-2);color:white;padding:6px"><div class="h-hand" style="font-size:14px">01 Produção</div></div>
+              <div class="sk-box" style="background:var(--lagoa-red);color:white;padding:6px"><div class="h-hand" style="font-size:14px">02 Qualid.</div></div>
+              <div class="sk-box" style="background:var(--lagoa-green);color:white;padding:6px"><div class="h-hand" style="font-size:14px">03 Manut.</div></div>
+              <div class="sk-box" style="background:var(--openmes);padding:6px"><div class="h-hand" style="font-size:14px">04 Indic.</div></div>
             </div>
             <div class="torn" style="margin:10px -10px"></div>
             <div class="note">feed ao vivo</div>
             <div style="margin-top:4px">
-              <div class="p-hand" style="font-size:11px"><span class="chip" style="background:var(--edp-green);color:white;font-size:10px;padding:1px 6px">OK</span> E01 acesso autorizado</div>
-              <div class="p-hand" style="font-size:11px;margin-top:3px"><span class="chip" style="background:var(--accent);font-size:10px;padding:1px 6px">AVISO</span> E03 acesso negado</div>
-              <div class="p-hand" style="font-size:11px;margin-top:3px"><span class="chip" style="background:var(--edp-red);color:white;font-size:10px;padding:1px 6px">ALERTA</span> P07 sensor offline</div>
+              <div class="p-hand" style="font-size:11px"><span class="chip" style="background:var(--lagoa-green);color:white;font-size:10px;padding:1px 6px">OK</span> L01 setup 14m</div>
+              <div class="p-hand" style="font-size:11px;margin-top:3px"><span class="chip" style="background:var(--openmes);font-size:10px;padding:1px 6px">ALERT</span> L03 micro-parada</div>
+              <div class="p-hand" style="font-size:11px;margin-top:3px"><span class="chip" style="background:var(--lagoa-red);color:white;font-size:10px;padding:1px 6px">STOP</span> L05 troca</div>
             </div>
             <div style="margin-top:10px"><span class="btn-hand" style="font-size:12px;padding:7px 12px">ficha →</span></div>
           </div>
@@ -1128,13 +1135,13 @@
         <h3>Destaque</h3>
         <div class="squiggle"></div>
         <ul>
-          <li>Metáfora de <b>eclusa / comporta</b> guia tudo.</li>
-          <li>Hero escuro navy, industrial, com silhueta de canal.</li>
-          <li>Módulos = comportas no sistema.</li>
-          <li>Formulário = "ficha de acesso".</li>
+          <li>Metáfora de <b>linha de produção</b> guia tudo.</li>
+          <li>Hero escuro, industrial, com silhueta sketchy.</li>
+          <li>Módulos = estações na esteira.</li>
+          <li>Cadastro = "ficha de produção".</li>
         </ul>
         <div style="margin-top:10px">
-          <span class="pill">eclusa</span>
+          <span class="pill">industrial</span>
           <span class="pill">metáfora</span>
           <span class="pill">distintivo</span>
         </div>
@@ -1149,9 +1156,9 @@
   <label>Cor de acento principal</label>
   <div class="row" data-group="accent">
     <button data-val="yellow" class="on">amarelo</button>
-    <button data-val="navy">navy EDP</button>
-    <button data-val="red">vermelho EDP</button>
-    <button data-val="green">verde EDP</button>
+    <button data-val="blue">azul SENAI</button>
+    <button data-val="red">bordô Lagoa</button>
+    <button data-val="green">verde Lagoa</button>
   </div>
   <label style="margin-top:10px">Aspereza do sketch</label>
   <div class="row" data-group="rough">
@@ -1161,39 +1168,39 @@
   </div>
   <label style="margin-top:10px">Ir para</label>
   <div class="row" data-group="panel">
-    <button data-val="p0">visão</button>
-    <button data-val="p1" class="on">01</button>
+    <button data-val="p0" class="on">visão</button>
+    <button data-val="p1">01</button>
     <button data-val="p2">02</button>
     <button data-val="p3">03</button>
     <button data-val="p4">04</button>
   </div>
-  <div style="margin-top:12px;border-top:1.5px dashed var(--ink);padding-top:10px">
-    <button onclick="document.getElementById('tweaks').classList.remove('open');document.getElementById('tweaks-toggle').style.display=''" style="font-family:Kalam;font-size:12px;border:1.5px solid var(--ink);border-radius:8px;background:var(--paper);padding:4px 10px;cursor:pointer;width:100%">fechar ✕</button>
-  </div>
 </div>
-<button id="tweaks-toggle" onclick="document.getElementById('tweaks').classList.add('open');this.style.display='none'">⚙ Tweaks</button>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
   // Tabs
   const tabs = document.querySelectorAll('.tab');
   const panels = document.querySelectorAll('.panel');
   function go(id){
     panels.forEach(p=>p.classList.toggle('active', p.id===id));
     tabs.forEach(t=>t.classList.toggle('active', t.dataset.panel===id));
-    try{ localStorage.setItem('edp_panel', id); }catch(e){}
+    try{ localStorage.setItem('om_panel', id); }catch(e){}
+    // sync tweak panel buttons
     document.querySelectorAll('#tweaks [data-group="panel"] button').forEach(b=>b.classList.toggle('on', b.dataset.val===id));
     window.scrollTo({top:0, behavior:'instant'});
   }
   tabs.forEach(t=>t.addEventListener('click', ()=>go(t.dataset.panel)));
-  const saved = (()=>{ try{return localStorage.getItem('edp_panel')}catch(e){return null} })();
+  const saved = (()=>{ try{return localStorage.getItem('om_panel')}catch(e){return null} })();
   if(saved){ go(saved); }
 
   // Tweaks
-  const TWEAK_DEFAULTS = { "accent": "yellow", "rough": "normal" };
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "accent": "yellow",
+    "rough": "normal"
+  }/*EDITMODE-END*/;
 
   function applyTweaks(t){
-    document.body.classList.remove('accent-navy','accent-red','accent-green');
-    if(t.accent==='navy') document.body.classList.add('accent-navy');
+    document.body.classList.remove('accent-blue','accent-red','accent-green');
+    if(t.accent==='blue') document.body.classList.add('accent-blue');
     if(t.accent==='red') document.body.classList.add('accent-red');
     if(t.accent==='green') document.body.classList.add('accent-green');
 
@@ -1208,14 +1215,22 @@
   let current = {...TWEAK_DEFAULTS};
   applyTweaks(current);
 
-  document.querySelectorAll('#tweaks button[data-val]').forEach(b=>{
+  // register listener BEFORE announcing
+  window.addEventListener('message', (e)=>{
+    const d = e.data || {};
+    if(d.type==='__activate_edit_mode'){ document.getElementById('tweaks').classList.add('open'); }
+    if(d.type==='__deactivate_edit_mode'){ document.getElementById('tweaks').classList.remove('open'); }
+  });
+  try{ window.parent.postMessage({type:'__edit_mode_available'}, '*'); }catch(e){}
+
+  document.querySelectorAll('#tweaks button').forEach(b=>{
     b.addEventListener('click', ()=>{
       const group = b.parentElement.dataset.group;
       const val = b.dataset.val;
-      if(!group) return;
       if(group==='panel'){ go(val); return; }
       current[group] = val;
       applyTweaks(current);
+      try{ window.parent.postMessage({type:'__edit_mode_set_keys', edits: current}, '*'); }catch(e){}
     });
   });
 </script>

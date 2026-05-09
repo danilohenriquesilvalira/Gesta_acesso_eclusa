@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+﻿import React, { useState, useRef, useEffect } from "react";
 
 // ── paleta ────────────────────────────────────────────────────────────────────
 const C = {
@@ -16,88 +16,6 @@ const C = {
 
 // ── primitivas visuais ────────────────────────────────────────────────────────
 
-function SkBox({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <div style={{
-      border: `2px solid ${C.ink}`, borderRadius: "10px 14px 8px 12px",
-      padding: 16, background: C.paper, ...style,
-    }}>
-      {children}
-    </div>
-  );
-}
-
-function SkLine({ style }: { style?: React.CSSProperties }) {
-  return <div style={{ height: 2, background: C.ink, borderRadius: 2, margin: "8px 0", opacity: 0.8, ...style }} />;
-}
-
-function Hand({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, lineHeight: 1.1, ...style }}>{children}</div>;
-}
-
-function Note({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 12, opacity: 0.65, lineHeight: 1.5, ...style }}>{children}</div>;
-}
-
-function Tag({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <span style={{
-      display: "inline-block", fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 12,
-      padding: "3px 10px", border: `1.5px solid ${C.ink}`, borderRadius: "16px 12px 18px 10px",
-      background: C.paper, ...style,
-    }}>{children}</span>
-  );
-}
-
-function Torn() {
-  return (
-    <div style={{
-      height: 14, margin: "4px 0",
-      backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 14'><path d='M0 7 L 8 3 L 16 9 L 24 4 L 32 8 L 40 3 L 48 9 L 56 5 L 64 8 L 72 3 L 80 9 L 88 4 L 96 8 L 104 3 L 112 9 L 120 4 L 128 8 L 136 3 L 144 9 L 152 5 L 160 8 L 168 3 L 176 9 L 184 4 L 192 8 L 200 5' stroke='%231a1a1a' stroke-width='1.5' fill='none'/></svg>")`,
-      backgroundRepeat: "repeat-x", opacity: 0.35,
-    }} />
-  );
-}
-
-function SectionLabel({ n, children }: { n: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-      <div style={{
-        width: 48, height: 48, border: `2.5px solid ${C.ink}`, borderRadius: "50%",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 22, flexShrink: 0,
-      }}>{n}</div>
-      <Hand style={{ fontSize: 28 }}>{children}</Hand>
-    </div>
-  );
-}
-
-function Cross({ text }: { text: string }) {
-  return (
-    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
-      <div style={{
-        width: 26, height: 26, border: `2px solid ${C.red}`, borderRadius: 4,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: C.red, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 18, flexShrink: 0, marginTop: 1,
-      }}>X</div>
-      <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.5 }}>{text}</span>
-    </div>
-  );
-}
-
-function Check({ text }: { text: string }) {
-  return (
-    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
-      <div style={{
-        width: 26, height: 26, border: `2px solid ${C.green}`, borderRadius: 4,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: C.green, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 18, flexShrink: 0, marginTop: 1,
-      }}>V</div>
-      <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.5 }}>{text}</span>
-    </div>
-  );
-}
-
 function AlertBox({ children, color = C.red }: { children: React.ReactNode; color?: string }) {
   return (
     <div style={{
@@ -110,631 +28,763 @@ function AlertBox({ children, color = C.red }: { children: React.ReactNode; colo
   );
 }
 
-function DiagramaArquitectura() {
+function Cross({ text }: { text: string }) {
   return (
-    <div style={{ border: `2.5px solid ${C.ink}`, borderRadius: "18px 22px 16px 24px", background: C.paper, boxShadow: `5px 5px 0 ${C.ink}`, padding: 12, position: "relative" }}>
-      <Note style={{ marginBottom: 8, fontSize: 11 }}>diagrama · arquitectura actual</Note>
-      <img
-        src="/Projeto_atual.svg"
-        alt="Diagrama arquitectura actual"
-        style={{ width: "100%", height: "auto", display: "block", borderRadius: 8 }}
-      />
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
+      <div style={{ width: 22, height: 22, border: `2px solid ${C.red}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", color: C.red, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 16, flexShrink: 0, marginTop: 2 }}>X</div>
+      <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.5 }}>{text}</span>
     </div>
   );
 }
 
-function DiagramaFalhaRDP() {
+function Check({ text }: { text: string }) {
   return (
-    <div style={{ border: `2.5px solid ${C.ink}`, borderRadius: "18px 14px 16px 20px", background: C.paper, boxShadow: `5px 5px 0 ${C.ink}`, padding: 20 }}>
-      <Note style={{ marginBottom: 14, fontSize: 11 }}>diagrama · sequencia de falha RDP</Note>
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
+      <div style={{ width: 22, height: 22, border: `2px solid ${C.green}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", color: C.green, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 16, flexShrink: 0, marginTop: 2 }}>V</div>
+      <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.5 }}>{text}</span>
+    </div>
+  );
+}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 0, overflowX: "auto" }}>
-        <div style={{ textAlign: "center", minWidth: 110 }}>
-          <div style={{ border: `2px solid ${C.ink}`, borderRadius: 8, padding: "8px 10px", background: C.paper2, marginBottom: 8 }}>
-            <Hand style={{ fontSize: 16 }}>Mini PC</Hand>
-            <Note style={{ fontSize: 10 }}>Operador</Note>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 80, textAlign: "center", position: "relative" }}>
-          <svg width="100%" height="40" viewBox="0 0 100 40" preserveAspectRatio="none">
-            <line x1="0" y1="20" x2="35" y2="20" stroke={C.ink} strokeWidth="2" strokeDasharray="4 3"/>
-            <text x="50" y="26" textAnchor="middle" fontFamily="Caveat, cursive" fontSize="20" fontWeight="900" fill={C.red}>X</text>
-            <line x1="65" y1="20" x2="100" y2="20" stroke={C.ink} strokeWidth="2" strokeDasharray="4 3"/>
-          </svg>
-          <Note style={{ fontSize: 9, color: C.red, opacity: 1, marginTop: -6 }}>RDP interrompido</Note>
-        </div>
-
-        <div style={{ textAlign: "center", minWidth: 110 }}>
-          <div style={{ border: `2px solid ${C.ink}`, borderRadius: 8, padding: "8px 10px", background: C.paper2, marginBottom: 8 }}>
-            <Hand style={{ fontSize: 16 }}>Cliente WinCC</Hand>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 40, textAlign: "center" }}>
-          <svg width="100%" height="40" viewBox="0 0 60 40" preserveAspectRatio="none">
-            <line x1="0" y1="20" x2="50" y2="20" stroke={C.ink} strokeWidth="2"/>
-            <polygon points="50,14 60,20 50,26" fill={C.ink}/>
-          </svg>
-        </div>
-
-        <div style={{ textAlign: "center", minWidth: 110 }}>
-          <div style={{ border: `2px solid ${C.accent}`, borderRadius: 8, padding: "8px 10px", background: C.accent + "30" }}>
-            <Hand style={{ fontSize: 16 }}>WinCC Server</Hand>
-            <Note style={{ fontSize: 9 }}>continua activo</Note>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ height: 14, margin: "12px 0", backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 14'><path d='M0 7 L 8 3 L 16 9 L 24 4 L 32 8 L 40 3 L 48 9 L 56 5 L 64 8 L 72 3 L 80 9 L 88 4 L 96 8 L 104 3 L 112 9 L 120 4 L 128 8 L 136 3 L 144 9 L 152 5 L 160 8 L 168 3 L 176 9 L 184 4 L 192 8 L 200 5' stroke='%231a1a1a' stroke-width='1.5' fill='none'/></svg>\")", backgroundRepeat: "repeat-x", opacity: 0.35 }} />
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
-        {[
-          { label: "Ecra do operador", text: "pode ficar congelado ou desligado", color: C.red },
-          { label: "WinCC Server", text: "continua a funcionar -- nao detecta nada", color: C.accent },
-          { label: "Sistema", text: "nao detecta. Nao alerta. Nao regista.", color: C.red },
-        ].map(({ label, text, color }) => (
-          <div key={label} style={{ border: `2px solid ${color}`, borderRadius: 8, padding: 10, background: color + "10" }}>
-            <Hand style={{ fontSize: 16 }}>{label}</Hand>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, marginTop: 4, lineHeight: 1.4 }}>{text}</p>
-          </div>
+// ── Sidebar sticky ─────────────────────────────────────────────────────────────
+function Aside({ titulo, pontos, pills }: {
+  titulo: string;
+  pontos: { label?: string; text: string }[];
+  pills?: string[];
+}) {
+  return (
+    <div style={{
+      position: "sticky", top: 140,
+      border: `2px dashed ${C.ink}`, borderRadius: 14, padding: 18,
+      background: "rgba(255,255,255,0.5)",
+    }}>
+      <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 26, marginBottom: 4 }}>{titulo}</div>
+      <div style={{ height: 10, width: 160, marginBottom: 10, backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 10'><path d='M0 5 Q 10 0 20 5 T 40 5 T 60 5 T 80 5' stroke='%231a1a1a' stroke-width='1.5' fill='none'/></svg>")`, backgroundRepeat: "repeat-x", backgroundSize: "80px 10px", opacity: 0.5 }} />
+      <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontFamily: "'Kalam', cursive", fontSize: 13, lineHeight: 1.5 }}>
+        {pontos.map((p, i) => (
+          <li key={i} style={{ marginBottom: 6 }}>{p.label && <b>{p.label} </b>}{p.text}</li>
         ))}
-      </div>
+      </ul>
+      {pills && (
+        <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {pills.map(p => (
+            <span key={p} style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 11, display: "inline-block", padding: "2px 8px", border: `1.5px solid ${C.ink}`, borderRadius: 10 }}>{p}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function SistemaActual() {
+// ═══════════════════════════════════════════════════════════════════════════════
+// SISTEMA ACTUAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type TopicActual = "arquitectura" | "falha-rdp";
+
+function TopicHeader({ cor, label, titulo, sub }: { cor: string; label: string; titulo: React.ReactNode; sub: string }) {
   return (
-    <div>
-
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <div style={{
-            background: C.red, color: "white", border: `2px solid ${C.ink}`,
-            borderRadius: "12px 8px 14px 10px", padding: "4px 14px",
-            fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 13,
-          }}>Sistema Actual</div>
-          <Tag>diagnostico</Tag>
-          <Tag>SCADA WinCC</Tag>
-          <Tag>RDP</Tag>
-        </div>
-        <Hand style={{ fontSize: 52, marginTop: 10, lineHeight: 1 }}>
-          Estrutura <span style={{ color: C.red }}>Atual</span>
-        </Hand>
-        <Hand style={{ fontSize: 24, marginTop: 6, opacity: 0.6 }}>como esta organizado o sistema hoje</Hand>
-        <div style={{ height: 2, background: C.ink, borderRadius: 2, margin: "14px 0", opacity: 0.8, width: "60%" }} />
-      </div>
-
-      <div style={{ marginBottom: 40 }}>
-        <SectionLabel n="01">A arquitectura — levantamento tecnico</SectionLabel>
-
-        {/* Intro + diagrama lado a lado */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
-          <div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65, marginBottom: 14 }}>
-              O sistema assenta no modelo <b>cliente-servidor do WinCC Explorer v7.5</b> — uma arquitectura SCADA da Siemens cuja concepcao remonta a meados dos anos 90. Neste modelo, <b>os clientes nao possuem projecto proprio</b>: toda a logica, todos os tags, todos os scripts e toda a historicizacao residem exclusivamente no <b>WinCC Server</b>.
-            </p>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65, marginBottom: 14 }}>
-              Cada cliente e essencialmente um <b>terminal burro</b> — abre uma janela de visualizacao e pede ao servidor, via rede, cada valor que precisa de mostrar. Qualquer accao do operador (telecomando, reconhecimento de alarme, navegacao de ecra) gera um pedido de rede ao servidor, que tem de o processar, responder e actualizar todos os outros clientes ligados em simultaneo.
-            </p>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65, marginBottom: 14 }}>
-              No caso concreto deste projecto, o servidor esta a gerir <b>10 clientes em simultaneo</b>, recebendo tags de todas as eclusas por <b>VLANs separadas</b>, executando scripts partilhados em ciclo continuo, e respondendo a pedidos concorrentes de todos os postos ao mesmo tempo.
-            </p>
-
-            {/* Componentes do sistema */}
-            <div style={{ marginTop: 4, marginBottom: 16 }}>
-              {[
-                { label: "VMware ESXi", sub: "1 servidor de virtualizacao fisico — aloja todas as VMs" },
-                { label: "WinCC Server", sub: "1 VM — centraliza projecto, tags, scripts, historico" },
-                { label: "Clientes WinCC", sub: "10 VMs — sem projecto proprio, dependem 100% do server" },
-                { label: "Mesas de operacao", sub: "5 x (posto operacao + posto supervisao)" },
-                { label: "Mini PCs", sub: "10 dispositivos fisicos — 2 por mesa" },
-                { label: "VLANs de processo", sub: "multiplas — uma por sistema de eclusas" },
-                { label: "PLCs das eclusas", sub: "ligados directamente ao WinCC Server via VLANs" },
-              ].map(({ label, sub }) => (
-                <div key={label} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 7 }}>
-                  <div style={{ width: 9, height: 9, border: `2px solid ${C.ink}`, borderRadius: "50%", flexShrink: 0, marginTop: 5 }} />
-                  <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, lineHeight: 1.5 }}><b>{label}</b> — {sub}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Fluxo de comunicacao */}
-            <div style={{ border: `2px solid ${C.blue}`, borderRadius: 10, padding: 14, background: C.blue + "08", marginBottom: 14 }}>
-              <Hand style={{ fontSize: 16, color: C.blue, marginBottom: 8 }}>Fluxo de comunicacao no sistema actual</Hand>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {[
-                  { step: "1", label: "PLC das eclusas", desc: "envia dados de processo via VLAN dedicada", cor: C.navy },
-                  { step: "2", label: "WinCC Server", desc: "recebe, processa e centraliza todos os dados", cor: C.accent },
-                  { step: "3", label: "Clientes WinCC (VMs)", desc: "pedem dados ao server via rede interna (NetDDE/DCOM)", cor: C.blue },
-                  { step: "4", label: "Camada RDP", desc: "Mini PCs acedem remotamente a cada VM cliente", cor: C.red },
-                  { step: "5", label: "Mini PCs nas mesas", desc: "operadores interagem via sessao RDP — invisivel ao WinCC", cor: C.green },
-                ].map(({ step, label, desc, cor }) => (
-                  <div key={step} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <div style={{ width: 22, height: 22, background: cor, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <span style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 13, color: "white" }}>{step}</span>
-                    </div>
-                    <div>
-                      <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, fontWeight: 700 }}>{label}</span>
-                      <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 12, color: "#555", marginLeft: 6 }}>{desc}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Nota critica sobre o RDP */}
-            <div style={{ border: `2px dashed ${C.red}`, borderRadius: 10, padding: 12, background: C.red + "06" }}>
-              <Hand style={{ fontSize: 15, color: C.red, marginBottom: 6 }}>O problema invisivel — a camada RDP</Hand>
-              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, lineHeight: 1.55, margin: 0 }}>
-                Todo o acesso dos operadores ao WinCC passa por uma <b>sessao RDP</b> estabelecida entre o Mini PC fisico e a VM cliente. Esta camada e <b>completamente desconhecida ao WinCC</b> — o servidor trata a VM como localmente activa, independentemente do estado da ligacao remota. Se a sessao cair, o WinCC nao sabe, nao alerta e nao reage.
-              </p>
-            </div>
-          </div>
-          <DiagramaArquitectura />
-        </div>
-
-        {/* Bloco tecnico: modelo cliente-servidor WinCC v7.5 */}
-        <div style={{ border: `2.5px solid ${C.ink}`, borderRadius: "14px 18px 12px 16px", padding: 22, background: C.paper2, marginBottom: 20, boxShadow: `4px 4px 0 ${C.ink}` }}>
-          <Hand style={{ fontSize: 22, marginBottom: 12 }}>Como funciona o modelo cliente-servidor WinCC v7.5</Hand>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-            <div>
-              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
-                No WinCC Explorer v7.5, o servidor e o <b>unico detentor do projecto SCADA</b>. Os clientes ligam-se ao servidor atraves do <b>NetDDE / DCOM</b> (tecnologia Windows da era Windows NT) e recebem os dados por streaming de rede. Nao existe cache local relevante nos clientes.
-              </p>
-              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.6 }}>
-                Todos os <b>Global Scripts</b> (scripts ciclicos de automacao, calculo de setpoints, logica de interlocking) executam <b>no contexto do servidor</b>, num ciclo partilhado. Quando varios clientes desencadeiam accoes em simultaneo, os scripts concorrem pelo mesmo ciclo de execucao.
-              </p>
-            </div>
-            <div>
-              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
-                O proprio manual da Siemens desaconselha explicitamente a utilizacao de WinCC v7 em ambientes com <b>VLANs segmentadas</b> e latencias de rede variaveis, recomendando uma LAN plana de baixa latencia. No caso actual, o servidor recebe dados de processo por <b>multiplas VLANs</b> distintas, introduzindo jitter e atrasos de sincronizacao.
-              </p>
-              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.6 }}>
-                Esta arquitectura foi concebida para ambientes industriais isolados dos anos 90, com <b>1 a 3 clientes locais</b>, sem acesso remoto, sem VLANs e sem requisitos de seguranca de sessao.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Gargalos tecnicos */}
-        <Hand style={{ fontSize: 22, marginBottom: 14 }}>Gargalos identificados na estrutura actual</Hand>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
-          {[
-            {
-              titulo: "Servidor como ponto unico de falha",
-              cor: C.red,
-              texto: "Toda a logica SCADA, todos os tags de todas as eclusas e todo o historico residem numa unica VM. Uma falha ou sobrecarga do servidor interrompe simultaneamente todos os 10 postos de operacao.",
-            },
-            {
-              titulo: "10 clientes em carga simultanea",
-              cor: C.red,
-              texto: "O servidor processa em simultaneo pedidos de visualizacao, actualizacoes de tags e confirmacoes de alarme de 10 clientes. O WinCC v7.5 nao foi dimensionado para esta carga com VLANs de processo separadas.",
-            },
-            {
-              titulo: "Race conditions nos Global Scripts",
-              cor: C.red,
-              texto: "Os scripts ciclicos partilham o mesmo clock de execucao no servidor. Com 10 clientes activos, accoes concorrentes (ex: dois operadores a confirmar alarmes ao mesmo tempo) podem causar conflitos de execucao, atrasos ou resultados imprevistos.",
-            },
-            {
-              titulo: "Latencia por VLANs multiplas",
-              cor: "#B45309",
-              texto: "Cada sistema de eclusas comunica via uma VLAN de processo separada. O servidor tem de agregar e sincronizar dados de multiplas VLANs com latencias distintas, criando inconsistencias temporais nos dados apresentados aos operadores.",
-            },
-            {
-              titulo: "Tecnologia de 1995 em operacao critica",
-              cor: "#B45309",
-              texto: "O WinCC Explorer (SCADA WinCC classico) e baseado em arquitecturas Windows NT / COM / NetDDE. Estes protocolos de comunicacao nao tem garantias de entrega, sao vulneraveis a disrupcoes de rede e nao suportam reconexao automatica fiavel.",
-            },
-            {
-              titulo: "Sem mecanismos de sessao ou autenticacao",
-              cor: "#B45309",
-              texto: "O modelo cliente-servidor do WinCC v7.5 nao inclui gestao de sessao por utilizador a nivel de acesso ao cliente. Nao existe registo de quem esta ligado a qual cliente em que momento.",
-            },
-          ].map(({ titulo, cor, texto }) => (
-            <div key={titulo} style={{ border: `2px solid ${cor}`, borderRadius: 10, padding: 14, background: cor + "0A" }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
-                <div style={{ width: 28, height: 28, border: `2px solid ${cor}`, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", color: cor, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 18, flexShrink: 0 }}>!</div>
-                <Hand style={{ fontSize: 17, color: cor, lineHeight: 1.2 }}>{titulo}</Hand>
-              </div>
-              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{texto}</p>
-            </div>
-          ))}
-        </div>
-
-        <AlertBox color={C.red}>
-          <b>Conclusao do levantamento:</b> O sistema funciona — mas assenta numa arquitectura centralizada de 30 anos, a operar fora das condicoes recomendadas pelo fabricante (VLANs, 10 clientes, acesso remoto por RDP). Qualquer instabilidade no servidor ou na rede afecta todos os postos em simultaneo, sem mecanismos de deteccao ou recuperacao automatica.
-        </AlertBox>
-      </div>
-
-      <Torn />
-
-      <div style={{ marginBottom: 40, marginTop: 32 }}>
-        <SectionLabel n="02">O que acontece quando o RDP falha</SectionLabel>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 20 }}>
-          <div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.6, marginBottom: 16 }}>
-              Quando a sessao RDP cai, o WinCC <b>nao e notificado</b>. O servidor continua a tratar aquele posto como activo.
-            </p>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.6, marginBottom: 16 }}>
-              Se um operador der uma <b>ordem de telecomando</b> imediatamente antes de a ligacao cair, essa ordem <span style={{ color: C.red, fontWeight: 700 }}>pode nunca chegar a eclusa</span> -- e o sistema nao sabera que falhou.
-            </p>
-
-            <AlertBox color={C.red}>
-              <b>Cenario critico:</b> Operador envia telecomando -- RDP cai nesse instante -- WinCC Server processa o pedido mas a resposta nunca chega -- eclusa pode nao executar a ordem -- <b>nenhum alerta e gerado</b>.
-            </AlertBox>
-          </div>
-
-          <DiagramaFalhaRDP />
-        </div>
-      </div>
-
-      <Torn />
-
-      <div style={{ marginBottom: 40, marginTop: 32 }}>
-        <SectionLabel n="03">Outras consequencias da invisibilidade do RDP</SectionLabel>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-
-          <div style={{ border: `2px solid ${C.ink}`, borderRadius: "10px 14px 8px 12px", padding: 16, background: C.paper, borderColor: C.red }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
-              <div style={{ width: 32, height: 32, border: `2.5px solid ${C.red}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: C.red, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 22, flexShrink: 0 }}>X</div>
-              <Hand style={{ fontSize: 22, color: C.red, lineHeight: 1 }}>Sem controlo de quem abre a sessao</Hand>
-            </div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.55 }}>
-              Qualquer pessoa com acesso a rede pode estabelecer uma sessao RDP a um Cliente WinCC. O WinCC <b>nao distingue</b> um operador autorizado de uma ligacao nao autorizada.
-            </p>
-          </div>
-
-          <div style={{ border: `2px solid ${C.red}`, borderRadius: "10px 14px 8px 12px", padding: 16, background: C.paper }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
-              <div style={{ width: 32, height: 32, border: `2.5px solid ${C.red}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: C.red, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 22, flexShrink: 0 }}>X</div>
-              <Hand style={{ fontSize: 22, color: C.red, lineHeight: 1 }}>Sem interlocking real</Hand>
-            </div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.55 }}>
-              Dois postos podem aceder a <b>mesma eclusa em simultaneo</b>. O WinCC nao tem forma de impedir conflitos de telecomando originados em sessoes RDP diferentes.
-            </p>
-          </div>
-
-          <div style={{ border: `2px solid ${C.red}`, borderRadius: "10px 14px 8px 12px", padding: 16, background: C.paper }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
-              <div style={{ width: 32, height: 32, border: `2.5px solid ${C.red}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: C.red, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 22, flexShrink: 0 }}>X</div>
-              <Hand style={{ fontSize: 22, color: C.red, lineHeight: 1 }}>Supervisao sem garantias</Hand>
-            </div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.55 }}>
-              O posto de supervisao de cada mesa esta tambem dependente de uma <b>sessao RDP propria</b>. Se essa sessao cair, o supervisor perde a visibilidade -- <b>sem qualquer alerta</b>.
-            </p>
-          </div>
-
-          <div style={{ border: `2px solid ${C.red}`, borderRadius: "10px 14px 8px 12px", padding: 16, background: C.paper }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
-              <div style={{ width: 32, height: 32, border: `2.5px solid ${C.red}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: C.red, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 22, flexShrink: 0 }}>X</div>
-              <Hand style={{ fontSize: 22, color: C.red, lineHeight: 1 }}>Sem registo de sessoes</Hand>
-            </div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.55 }}>
-              Nao existe historico de quando cada sessao RDP foi estabelecida, quem a iniciou, ou quando terminou. Em caso de incidente, <b>nao ha rastreabilidade</b>.
-            </p>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 24, border: `3px solid ${C.ink}`, borderRadius: "16px 20px 14px 18px", padding: 24, background: C.navy, color: "white", boxShadow: `6px 6px 0 ${C.ink}` }}>
-          <Hand style={{ fontSize: 28, color: "white", marginBottom: 10 }}>Resumo do diagnostico</Hand>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            {[
-              "O WinCC nao monitoriza o estado das sessoes RDP",
-              "Nao ha controlo de acesso a camada de ligacao remota",
-              "Conflitos de telecomando sao possiveis e nao detectados",
-              "Perda de supervisao sem alerta ao operador ou sistema",
-              "Zero rastreabilidade em caso de incidente",
-              "A seguranca operacional depende inteiramente de procedimentos manuais",
-            ].map(t => <Cross key={t} text={t} />)}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ border: `2.5px dashed ${C.ink}`, borderRadius: 14, padding: 28, textAlign: "center", background: C.paper2, marginBottom: 20 }}>
-        <Hand style={{ fontSize: 22, opacity: 0.5 }}>[ espaco reservado para imagem real da sala de telecomando ]</Hand>
-        <Note style={{ marginTop: 6 }}>fotografia da sala / ecras / mesas de operacao -- a inserir</Note>
-      </div>
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 12, opacity: 0.65, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 40, lineHeight: 1 }}>{titulo}</div>
+      <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 20, opacity: 0.55, marginTop: 6 }}>{sub}</div>
+      <div style={{ height: 2, background: cor, opacity: 0.7, borderRadius: 2, margin: "14px 0", width: "45%" }} />
     </div>
   );
 }
 
-function DiagramaArquitecturaProposta() {
+function ActualArquitectura() {
   return (
-    <div style={{ border: `2.5px solid ${C.ink}`, borderRadius: "18px 22px 16px 24px", background: C.paper, boxShadow: `5px 5px 0 ${C.ink}`, padding: 20, position: "relative" }}>
-      <Note style={{ marginBottom: 12, fontSize: 11 }}>diagrama · arquitectura proposta — descentralizada</Note>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 24, height: "calc(100vh - 172px)", overflow: "hidden" }}>
 
-      {/* ESXi container */}
-      <div style={{ border: `2.5px solid ${C.blue}`, borderRadius: 12, padding: "18px 10px 14px", background: C.blue + "08", position: "relative", marginBottom: 0 }}>
-        <div style={{ position: "absolute", top: -12, left: 14, background: C.paper, padding: "0 8px", fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 13, color: C.blue, border: `1.5px solid ${C.blue}`, borderRadius: 4 }}>VMware ESXi</div>
+      {/* Main flow — flex column distribuído até ao fundo */}
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", overflow: "hidden" }}>
 
-        {/* 5 WinCC Servers individuais */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8 }}>
-          {[1,2,3,4,5].map(n => (
-            <div key={n} style={{ border: `2px solid ${C.accent}`, borderRadius: 8, padding: "8px 4px", background: C.accent + "18", textAlign: "center" }}>
-              <Hand style={{ fontSize: 13 }}>Server {n}</Hand>
-              <Note style={{ fontSize: 7, marginTop: 2 }}>WinCC Server</Note>
-              <Note style={{ fontSize: 7 }}>projecto proprio</Note>
-              <div style={{ marginTop: 5, border: `1.5px solid ${C.blue}`, borderRadius: 5, padding: "2px 3px", background: C.paper }}>
-                <Note style={{ fontSize: 7, color: C.blue }}>Client WinCC {n}</Note>
-              </div>
-              <div style={{ marginTop: 4, border: `1.5px solid ${C.green}`, borderRadius: 5, padding: "2px 3px", background: C.paper }}>
-                <Note style={{ fontSize: 7, color: C.green }}>PLC directo</Note>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Arrow down to EDP Acessos */}
-      <svg width="100%" height="18" style={{ display: "block" }}>
-        <line x1="50%" y1="0" x2="50%" y2="18" stroke={C.green} strokeWidth="2" strokeDasharray="3 2"/>
-      </svg>
-
-      {/* EDP Acessos Layer */}
-      <div style={{ border: `2.5px solid ${C.green}`, borderRadius: 8, padding: "10px 12px 8px", background: C.green + "10", position: "relative", marginBottom: 0 }}>
-        <div style={{ position: "absolute", top: -12, left: 14, background: C.paper, padding: "0 8px", fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 12, color: C.green, border: `1.5px solid ${C.green}`, borderRadius: 4 }}>EDP Acessos — camada de controlo inteligente</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6, marginTop: 4 }}>
-          {[
-            { label: "Monitor RDP", color: C.green },
-            { label: "Auth / Permissoes", color: C.blue },
-            { label: "Interlocking", color: C.accent },
-            { label: "Audit Log", color: C.navy },
-          ].map(({ label, color }) => (
-            <div key={label} style={{ border: `1.5px solid ${color}`, borderRadius: 5, padding: "4px 4px", textAlign: "center", background: color + "15" }}>
-              <Note style={{ fontSize: 9, color, opacity: 1, fontWeight: 700 }}>{label}</Note>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Arrow down to RDP + Mini PCs */}
-      <svg width="100%" height="18" style={{ display: "block" }}>
-        <line x1="50%" y1="0" x2="50%" y2="18" stroke={C.ink} strokeWidth="1.5" strokeDasharray="3 2"/>
-      </svg>
-
-      {/* RDP Layer — agora controlada */}
-      <div style={{ border: `2px solid ${C.green}`, borderRadius: 7, padding: "8px 10px 6px", background: C.green + "06", position: "relative", marginBottom: 0 }}>
-        <div style={{ position: "absolute", top: -11, left: 14, background: C.paper, padding: "0 8px", fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 11, color: C.green, border: `1px solid ${C.green}`, borderRadius: 4 }}>Camada RDP — monitorizada e gerida</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 5, marginTop: 4 }}>
-          {[1,2,3,4,5].map(n => (
-            <div key={n} style={{ border: `1.5px solid ${C.green}`, borderRadius: 5, padding: "3px 2px", textAlign: "center", background: C.green + "08" }}>
-              <Note style={{ fontSize: 8, color: C.green, opacity: 1 }}>RDP {n}</Note>
-              <Note style={{ fontSize: 7 }}>shadow OK</Note>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Arrow + Mini PCs */}
-      <svg width="100%" height="18" style={{ display: "block" }}>
-        <line x1="50%" y1="0" x2="50%" y2="18" stroke={C.ink} strokeWidth="1.5" strokeDasharray="3 2"/>
-      </svg>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
-        {[1,2,3,4,5].map(n => (
-          <div key={n} style={{ border: `2px solid ${C.green}`, borderRadius: 8, padding: "5px 3px", background: C.green + "10" }}>
-            <Hand style={{ fontSize: 13, textAlign: "center" }}>Mesa {n}</Hand>
-            <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
-              <div style={{ border: `1.5px solid ${C.ink}`, borderRadius: 4, padding: "2px 3px", textAlign: "center", background: C.paper }}>
-                <Note style={{ fontSize: 7 }}>Mini PC A</Note>
-              </div>
-              <div style={{ border: `1.5px solid ${C.ink}`, borderRadius: 4, padding: "2px 3px", textAlign: "center", background: C.paper }}>
-                <Note style={{ fontSize: 7 }}>Mini PC B</Note>
-              </div>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ flexShrink: 0 }}>
+            <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 9, opacity: 0.55 }}>sistema actual · arquitectura</div>
+            <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 26, lineHeight: 1.05 }}>
+              Arquitectura <span style={{ color: C.navy }}>Actual</span>
             </div>
           </div>
-        ))}
-      </div>
-      <Note style={{ marginTop: 8, fontSize: 8 }}>5 servidores independentes · 5 clientes WinCC · EDP Acessos · 5 RDP monitorizados · 10 Mini PCs</Note>
-    </div>
-  );
-}
-
-function SistemaProposto() {
-  return (
-    <div>
-
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <div style={{
-            background: C.green, color: "white", border: `2px solid ${C.ink}`,
-            borderRadius: "12px 8px 14px 10px", padding: "4px 14px",
-            fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 13,
-          }}>Sistema Proposto</div>
-          <Tag>solucao</Tag>
-          <Tag>EDP Acessos</Tag>
-          <Tag>descentralizacao</Tag>
+          <div style={{ flex: 1, height: 2, background: C.navy, opacity: 0.2, borderRadius: 2 }} />
+          {["ESXi · 1 server", "WinCC v7.5", "10 clientes", "5 VLANs"].map(t => (
+            <span key={t} style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 8px", border: `1.5px solid ${C.ink}`, borderRadius: 10, background: C.paper, flexShrink: 0 }}>{t}</span>
+          ))}
         </div>
-        <Hand style={{ fontSize: 52, marginTop: 10, lineHeight: 1 }}>
-          Controlo total. <span style={{ color: C.green }}>Arquitectura nova.</span>
-        </Hand>
-        <Hand style={{ fontSize: 24, marginTop: 6, opacity: 0.6 }}>o que o EDP Acessos torna possivel</Hand>
-        <div style={{ height: 2, background: C.ink, borderRadius: 2, margin: "14px 0", opacity: 0.8, width: "60%" }} />
-      </div>
 
-      {/* SECÇÃO 01 — O sistema EDP Acessos */}
-      <div style={{ marginBottom: 40 }}>
-        <SectionLabel n="01">O sistema EDP Acessos — a camada de controlo</SectionLabel>
+        {/* LAYER 1 — PLCs */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {["ECLUSA 1","ECLUSA 2","ECLUSA 3","ECLUSA 4","ECLUSA 5"].map((lbl, i) => (
+            <div key={lbl} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 6px", border: `2px solid ${C.ink}`, borderRadius: 10, background: C.paper, boxShadow: `2px 2px 0 ${C.ink}` }}>
+              <img src="/icone_PLC.svg" alt="PLC" style={{ width: 56, height: 56, objectFit: "contain" }} />
+              <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 14, lineHeight: 1 }}>PLC {i+1}</div>
+              <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 8, opacity: 0.5, lineHeight: 1 }}>{lbl}</div>
+              <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 9, padding: "1px 8px", border: `1px solid ${C.ink}`, borderRadius: 20, background: C.paper2 }}>~1 000 tags</span>
+            </div>
+          ))}
+        </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
-          <div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65, marginBottom: 14 }}>
-              O <b>EDP Acessos</b> é uma camada de software desenvolvida especificamente para resolver os gargalos identificados na estrutura actual. Ao contrario do WinCC — que foi concebido sem qualquer mecanismo de gestao de sessao remota — o EDP Acessos <b>monitoriza continuamente o estado real de cada sessao RDP</b>, interpoe-se no fluxo de acesso e toma decisoes de routing em tempo real.
-            </p>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65, marginBottom: 14 }}>
-              A monitorizacao e feita usando mecanismos nativos do Windows que permitem ao sistema <b>observar qualquer sessao RDP activa</b>, verificar o seu estado em tempo real, e detectar desconexoes imediatamente — sem depender do WinCC para o fazer.
-            </p>
+        {/* Arrow 1 */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 16px", border: `1.5px solid ${C.ink}`, borderRadius: 20, background: C.paper, whiteSpace: "nowrap", boxShadow: `1px 1px 0 ${C.ink}` }}>IEC 104 · RTU → WinCC Server · 5 VLANs segmentadas</span>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${C.ink}`, opacity: 0.4 }} />
+        </div>
 
-            {/* Visual: fluxo de acesso com EDP Acessos */}
-            <div style={{ border: `2px solid ${C.green}`, borderRadius: 10, padding: 16, background: C.green + "08", marginBottom: 14 }}>
-              <Note style={{ fontSize: 10, marginBottom: 10 }}>fluxo de acesso com EDP Acessos</Note>
-              <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                {[
-                  { icon: "→", label: "Operador autentica", sub: "credenciais EDP", cor: C.blue },
-                  { icon: "→", label: "EDP Acessos verifica", sub: "permissoes + disponibilidade", cor: C.green },
-                  { icon: "→", label: "RDP estabelecido", sub: "shadow activo", cor: C.accent },
-                  { icon: "→", label: "Monitorizado", sub: "heartbeat continuo", cor: C.navy },
-                ].map(({ icon, label, sub, cor }, i) => (
-                  <div key={label} style={{ display: "flex", alignItems: "center", flex: 1 }}>
-                    {i > 0 && <div style={{ color: cor, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 22, padding: "0 4px", flexShrink: 0 }}>{icon}</div>}
-                    <div style={{ border: `1.5px solid ${cor}`, borderRadius: 7, padding: "8px 6px", background: cor + "15", textAlign: "center", flex: 1 }}>
-                      <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 14, color: cor }}>{label}</div>
-                      <Note style={{ fontSize: 9, marginTop: 2 }}>{sub}</Note>
-                    </div>
-                  </div>
+        {/* LAYER 2 — ESXi / WinCC Server */}
+        <div style={{ border: `1.5px dashed ${C.ink}`, borderRadius: 10, padding: "5px 10px 7px", background: "rgba(33,46,62,0.025)" }}>
+          <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 8, opacity: 0.35, textAlign: "center", marginBottom: 4 }}>VMware ESXi · servidor físico</div>
+          <div style={{ border: `2px solid ${C.ink}`, borderRadius: 8, padding: "8px 14px", background: C.paper, boxShadow: `3px 3px 0 ${C.ink}`, display: "flex", gap: 12, alignItems: "center" }}>
+            <img src="/icone_Wincc.png" alt="WinCC" style={{ width: 52, height: 52, objectFit: "contain", flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 22, lineHeight: 1 }}>WinCC Server v7.5</div>
+              <div style={{ fontFamily: "'Mulish', sans-serif", fontSize: 10, opacity: 0.55, margin: "2px 0 5px" }}>VM única · todo o projecto SCADA, tags e scripts</div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {["5 canais IEC 104", "~5 000 tags", "Global Scripts", "10 licenças"].map(t => (
+                  <span key={t} style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "1px 10px", border: `1.5px solid ${C.ink}`, borderRadius: 20, background: C.paper2 }}>{t}</span>
                 ))}
               </div>
             </div>
-
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65 }}>
-              Com este controlo, o sistema consegue <b>autenticar o operador antes de estabelecer a sessao</b>, verificar as suas permissoes, confirmar que a eclusa destino esta disponivel, e registar toda a actividade de forma auditavel.
-            </p>
           </div>
-          <DiagramaArquitecturaProposta />
         </div>
 
-        {/* Bloco tecnico: o que o EDP Acessos faz */}
-        <div style={{ border: `2.5px solid ${C.ink}`, borderRadius: "14px 18px 12px 16px", padding: 22, background: C.paper2, marginBottom: 20, boxShadow: `4px 4px 0 ${C.ink}` }}>
-          <Hand style={{ fontSize: 22, marginBottom: 14 }}>Os quatro modulos do EDP Acessos</Hand>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
-            {[
-              { titulo: "Monitor RDP", cor: C.green, items: ["Estado em tempo real de cada sessao", "Deteccao imediata de desconexao", "Shadow via mstsc nativo do Windows", "Heartbeat por sessao activa"] },
-              { titulo: "Controlo de Acesso", cor: C.blue, items: ["Autenticacao por credenciais EDP", "Permissoes por operador e por eclusa", "Apenas postos autorizados acedem", "Sem accesso directo ao WinCC Client"] },
-              { titulo: "Interlocking", cor: C.accent, items: ["Exclusividade: 1 operador por eclusa", "Conflitos de telecomando eliminados", "Posto ocupado visivel a todos", "Libertacao automatica por timeout"] },
-              { titulo: "Auditoria", cor: C.navy, items: ["Log completo: quem, quando, qual posto", "Registo de cada acesso e desconexao", "Rastreabilidade total em caso de incidente", "Exportacao para relatorio"] },
-            ].map(({ titulo, cor, items }) => (
-              <div key={titulo} style={{ border: `2px solid ${cor}`, borderRadius: 10, padding: 14, background: cor + "0A" }}>
-                <Hand style={{ fontSize: 18, color: cor, marginBottom: 10 }}>{titulo}</Hand>
-                {items.map(t => (
-                  <div key={t} style={{ display: "flex", gap: 7, alignItems: "flex-start", marginBottom: 6 }}>
-                    <div style={{ width: 7, height: 7, background: cor, borderRadius: "50%", flexShrink: 0, marginTop: 5 }} />
-                    <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 12, lineHeight: 1.5 }}>{t}</span>
-                  </div>
-                ))}
+        {/* Arrow 2 */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 16px", border: `1.5px solid ${C.ink}`, borderRadius: 20, background: C.paper, whiteSpace: "nowrap", boxShadow: `1px 1px 0 ${C.ink}` }}>NetDDE / DCOM · Windows NT (1995)</span>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${C.ink}`, opacity: 0.4 }} />
+        </div>
+
+        {/* LAYER 3 — 10 WinCC Clients */}
+        <div>
+          <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 8, opacity: 0.35, textAlign: "center", marginBottom: 4 }}>10 WinCC Clients · VMs · sem projecto local · 100% dependentes do servidor</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: "6px 8px" }}>
+            {[1,2,3,4,5,6,7,8,9,10].map(n => (
+              <div key={n} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "5px 2px", border: `1px solid rgba(0,0,0,0.1)`, borderRadius: 8, background: C.paper }}>
+                <img src="/icone_Wincc.png" alt="WinCC" style={{ width: 42, height: 42, objectFit: "contain" }} />
+                <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 13, lineHeight: 1 }}>Cliente {n}</div>
+                <div style={{ fontFamily: "'Mulish', sans-serif", fontSize: 8, opacity: 0.4, lineHeight: 1 }}>sem projecto</div>
               </div>
             ))}
           </div>
         </div>
 
-        <AlertBox color={C.green}>
-          <b>O resultado imediato:</b> o numero de Clientes WinCC necessarios desce de <b>10 para 5</b>. Como o EDP Acessos gere o routing das sessoes, cada mesa pode aceder a qualquer eclusa disponivel sem necessitar de um cliente WinCC dedicado — o sistema dirige a sessao para o cliente correcto em funcao da disponibilidade real.
-        </AlertBox>
-      </div>
+        {/* Arrow 3 */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 16px", border: `1.5px solid ${C.red}`, borderRadius: 20, background: C.paper, color: C.red, whiteSpace: "nowrap", boxShadow: `1px 1px 0 ${C.red}` }}>RDP · camada invisível ao WinCC</span>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${C.ink}`, opacity: 0.4 }} />
+        </div>
 
-      <Torn />
-
-      {/* SECÇÃO 02 — Descentralização */}
-      <div style={{ marginBottom: 40, marginTop: 32 }}>
-        <SectionLabel n="02">Descentralizacao — de 1 servidor para 5</SectionLabel>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
-          <div>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65, marginBottom: 14 }}>
-              O sistema actual assenta numa arquitectura <b>completamente centralizada</b>: 1 WinCC Server gere todos os sistemas de eclusas, todos os PLCs, todos os scripts e todos os tags. Qualquer falha ou sobrecarga neste servidor afecta imediatamente todos os postos.
-            </p>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65, marginBottom: 14 }}>
-              O sistema proposto passa a <b>5 WinCC Servers independentes</b> — um por sistema de eclusas. Cada servidor tem o seu <b>projecto WinCC proprio</b>, os seus scripts dedicados, e uma <b>ligacao directa unica ao seu PLC</b>. Nao existem scripts partilhados, nao existem race conditions, nao existe dependencia cruzada entre sistemas.
-            </p>
-            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.65 }}>
-              Esta descentralizacao <b>so e possivel gracas ao EDP Acessos</b>. No modelo actual, os 10 clientes precisam de aceder ao mesmo servidor central para partilhar informacao de estado entre postos. Com o EDP Acessos a gerir toda a camada de acesso e routing, cada servidor pode operar de forma <b>completamente autonoma</b> — o sistema de controlo de acessos e que sabe o estado global, nao o WinCC.
-            </p>
-          </div>
-
-          <div>
-            {/* Comparação visual centralizado vs descentralizado */}
-            <div style={{ border: `2.5px solid ${C.ink}`, borderRadius: 12, overflow: "hidden", boxShadow: `4px 4px 0 ${C.ink}`, display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-              <div style={{ background: C.red, padding: "10px 16px", borderRight: `2px solid ${C.ink}` }}>
-                <Hand style={{ fontSize: 16, color: "white" }}>Actual — Centralizado</Hand>
+        {/* LAYER 4 — 5 Mesas */}
+        <div>
+          <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 8, opacity: 0.35, textAlign: "center", marginBottom: 4 }}>5 postos · 2 Mini PC · RDP → 2 clientes WinCC por mesa</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[1,2,3,4,5].map(n => (
+              <div key={n} style={{ flex: 1, border: `2px solid ${C.ink}`, borderRadius: "12px 10px 14px 8px", padding: "7px 4px 6px", textAlign: "center", background: C.paper2, boxShadow: `3px 3px 0 ${C.ink}` }}>
+                <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 17 }}>Mesa {n}</div>
+                <div style={{ fontFamily: "'Mulish', sans-serif", fontSize: 9, opacity: 0.45, marginTop: 1 }}>2 Mini PC</div>
+                <div style={{ marginTop: 4, border: `1px solid ${C.ink}`, borderRadius: 20, padding: "1px 6px", background: C.paper, display: "inline-block" }}>
+                  <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10 }}>C{n*2-1}+C{n*2}</span>
+                </div>
               </div>
-              <div style={{ background: C.green, padding: "10px 16px" }}>
-                <Hand style={{ fontSize: 16, color: "white" }}>Proposto — Distribuido</Hand>
-              </div>
-              {[
-                ["1 WinCC Server unico", "5 WinCC Servers independentes"],
-                ["10 Clientes WinCC", "5 Clientes WinCC (−50%)"],
-                ["Scripts partilhados — race conditions", "Scripts isolados por servidor"],
-                ["1 PLC via multiplas VLANs", "1 PLC directo por servidor"],
-                ["Falha do server = falha total", "Falha isolada — outros servers ok"],
-                ["RDP invisivel ao sistema", "RDP monitorizado e gerido pelo EDP Acessos"],
-                ["Sem autenticacao de operador", "Autenticacao obrigatoria pre-sessao"],
-                ["Zero rastreabilidade", "Auditoria completa e automatica"],
-              ].map(([atual, proposto], i) => (
-                <React.Fragment key={i}>
-                  <div style={{ padding: "8px 16px", borderRight: `2px solid ${C.ink}`, borderTop: `2px solid ${C.ink}`, background: i % 2 === 0 ? C.paper : C.paper2 }}>
-                    <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, color: C.red }}>✗ {atual}</span>
-                  </div>
-                  <div style={{ padding: "8px 16px", borderTop: `2px solid ${C.ink}`, background: i % 2 === 0 ? C.paper : C.paper2 }}>
-                    <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, color: C.green }}>✓ {proposto}</span>
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* 6 melhorias tecnicas */}
-        <Hand style={{ fontSize: 22, marginBottom: 14 }}>Melhorias tecnicas da descentralizacao</Hand>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
-          {[
-            { titulo: "Eliminacao das race conditions", cor: C.green, texto: "Com scripts isolados por servidor, nao existe concorrencia de execucao. Cada servidor executa os seus scripts no seu proprio ciclo, sem interferencia dos outros postos ou servidores." },
-            { titulo: "Latencia de rede reduzida", cor: C.green, texto: "Cada servidor comunica directamente com o seu PLC na sua VLAN. Nao ha agregacao de multiplas VLANs num unico ponto, eliminando o jitter e os atrasos de sincronizacao cruzada." },
-            { titulo: "Falha isolada por sistema", cor: C.green, texto: "Se um servidor tiver problema, apenas as eclusas desse sistema sao afectadas. Os outros 4 sistemas continuam operacionais — ao contrario do actual, onde 1 falha paralisa tudo." },
-            { titulo: "Reducao de 10 para 5 clientes", cor: C.blue, texto: "O EDP Acessos gere o routing de sessoes, permitindo que cada mesa aceda a qualquer eclusa disponivel. Deixa de ser necessario 1 cliente fixo por posto — 5 clientes chegam para 5 mesas." },
-            { titulo: "Projecto WinCC proprio por servidor", cor: C.blue, texto: "Cada servidor mantem apenas os tags e scripts relevantes para as suas eclusas. Projectos mais pequenos, mais rapidos, mais faceis de manter e diagnosticar individualmente." },
-            { titulo: "Escalabilidade futura", cor: C.blue, texto: "A arquitectura distribuida permite adicionar novos sistemas de eclusas sem impacto nos existentes. Basta adicionar um novo servidor WinCC e registar no EDP Acessos." },
-          ].map(({ titulo, cor, texto }) => (
-            <div key={titulo} style={{ border: `2px solid ${cor}`, borderRadius: 10, padding: 14, background: cor + "0A" }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
-                <div style={{ width: 26, height: 26, border: `2px solid ${cor}`, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", color: cor, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 17, flexShrink: 0 }}>V</div>
-                <Hand style={{ fontSize: 16, color: cor, lineHeight: 1.2 }}>{titulo}</Hand>
-              </div>
-              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{texto}</p>
-            </div>
-          ))}
-        </div>
-
-        <AlertBox color={C.green}>
-          <b>Por que o sistema actual nao permite isto:</b> No WinCC centralizado, os clientes dependem do servidor para partilhar estado entre si (qual eclusa esta ocupada, qual operador esta activo). Sem essa informacao centralizada no WinCC, o interlocking entre postos seria impossivel. O EDP Acessos assume essa funcao — tornando o WinCC livre para ser descentralizado.
-        </AlertBox>
-      </div>
-
-      <Torn />
-
-      {/* SECÇÃO 03 — Resumo e ganhos */}
-      <div style={{ marginBottom: 40, marginTop: 32 }}>
-        <SectionLabel n="03">Resumo dos ganhos da solucao proposta</SectionLabel>
-
-        <div style={{ border: `3px solid ${C.ink}`, borderRadius: "16px 20px 14px 18px", padding: 28, background: C.navy, color: "white", boxShadow: `6px 6px 0 ${C.ink}` }}>
-          <Hand style={{ fontSize: 30, color: "white", marginBottom: 16 }}>O que o EDP Acessos resolve</Hand>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        {/* Riscos */}
+        <div style={{ borderTop: `1.5px dashed ${C.ink}`, paddingTop: 8 }}>
+          <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 15, marginBottom: 5 }}>Riscos desta arquitectura</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px 14px" }}>
             {[
-              "Camada RDP monitorizada em tempo real — fim da invisibilidade",
-              "Autenticacao obrigatoria antes de qualquer acesso ao WinCC",
-              "Interlocking real: impossivel dois postos na mesma eclusa",
-              "Alertas automaticos ao supervisor em caso de queda de sessao",
-              "Auditoria completa: quem acedeu, quando, a que eclusa",
-              "Reducao de 10 para 5 Clientes WinCC necessarios",
-              "Descentralizacao: 5 servidores independentes, sem ponto unico de falha",
-              "Eliminacao das race conditions nos Global Scripts",
-              "Cada servidor com projecto proprio e ligacao directa ao PLC",
-              "Escalabilidade sem impacto nos sistemas existentes",
-            ].map(t => <Check key={t} text={t} />)}
+              { n: "1", t: "Ponto único de falha — 1 VM afecta 10 postos" },
+              { n: "2", t: "10 clientes simultâneos fora do dimensionamento" },
+              { n: "3", t: "Race conditions nos Global Scripts partilhados" },
+              { n: "4", t: "5 VLANs com latências díspares → inconsistências" },
+              { n: "5", t: "NetDDE/DCOM sem reconexão fiável (1995)" },
+              { n: "6", t: "Sem log de sessões nem gestão de acessos" },
+            ].map(({ n, t }) => (
+              <div key={n} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+                <div style={{ width: 17, height: 17, border: `1.5px solid ${C.ink}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 10, flexShrink: 0, opacity: 0.55 }}>{n}</div>
+                <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 11, lineHeight: 1.3, margin: 0, opacity: 0.75 }}>{t}</p>
+              </div>
+            ))}
           </div>
         </div>
+
       </div>
+
+      {/* Aside direito */}
+      <Aside titulo="Arquitectura" pontos={[
+        { label: "ESXi:", text: "1 servidor físico com todas as VMs" },
+        { label: "WinCC Server:", text: "1 VM com todo o projecto SCADA" },
+        { label: "10 Clientes:", text: "sem projecto próprio — 100% dependentes" },
+        { label: "NetDDE/DCOM:", text: "protocolo Windows NT, anos 90" },
+        { label: "Global Scripts:", text: "ciclo único partilhado por todos" },
+        { label: "5 VLANs:", text: "uma por sistema de eclusas" },
+      ]} pills={["ESXi", "WinCC Server", "NetDDE", "VLANs"]} />
 
     </div>
   );
 }
 
-type Tab = "actual" | "proposto";
+function ActualFalhaRDP() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 36, alignItems: "start" }}>
+      <div>
+        <TopicHeader cor={C.red} label="sistema actual · tópico" titulo={<>Falha <span style={{ color: C.red }}>RDP</span></>} sub="o que acontece quando a sessão cai" />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
+          <div>
+            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.6, marginBottom: 16 }}>Quando a sessão RDP cai, o WinCC <b>não é notificado</b>. O servidor continua a tratar aquele posto como activo.</p>
+            <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 15, lineHeight: 1.6, marginBottom: 16 }}>Se um operador der uma <b>ordem de telecomando</b> imediatamente antes de a ligação cair, essa ordem <span style={{ color: C.red, fontWeight: 700 }}>pode nunca chegar à eclusa</span> — e o sistema não saberá que falhou.</p>
+            <AlertBox color={C.red}><b>Cenário crítico:</b> Operador envia telecomando → RDP cai → WinCC Server processa mas a resposta nunca chega → eclusa pode não executar → <b>nenhum alerta é gerado</b>.</AlertBox>
+          </div>
+          <div style={{ border: `2.5px solid ${C.ink}`, borderRadius: "18px 14px 16px 20px", background: C.paper, boxShadow: `5px 5px 0 ${C.ink}`, padding: 20 }}>
+            <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 11, opacity: 0.65, marginBottom: 14 }}>diagrama · sequência de falha RDP</div>
+            <div style={{ display: "flex", alignItems: "center", overflowX: "auto" }}>
+              <div style={{ textAlign: "center", minWidth: 100 }}>
+                <div style={{ border: `2px solid ${C.ink}`, borderRadius: 8, padding: "8px 10px", background: C.paper2 }}>
+                  <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 15 }}>Mini PC</div>
+                  <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 10, opacity: 0.65 }}>Operador</div>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 80, textAlign: "center" }}>
+                <svg width="100%" height="40" viewBox="0 0 100 40" preserveAspectRatio="none">
+                  <line x1="0" y1="20" x2="35" y2="20" stroke={C.ink} strokeWidth="2" strokeDasharray="4 3"/>
+                  <text x="50" y="26" textAnchor="middle" fontFamily="Caveat, cursive" fontSize="20" fontWeight="900" fill={C.red}>X</text>
+                  <line x1="65" y1="20" x2="100" y2="20" stroke={C.ink} strokeWidth="2" strokeDasharray="4 3"/>
+                </svg>
+                <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 9, color: C.red, opacity: 1, marginTop: -6 }}>RDP interrompido</div>
+              </div>
+              <div style={{ textAlign: "center", minWidth: 100 }}>
+                <div style={{ border: `2px solid ${C.ink}`, borderRadius: 8, padding: "8px 10px", background: C.paper2 }}>
+                  <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 15 }}>WinCC Client</div>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 40, textAlign: "center" }}>
+                <svg width="100%" height="40" viewBox="0 0 60 40" preserveAspectRatio="none">
+                  <line x1="0" y1="20" x2="50" y2="20" stroke={C.ink} strokeWidth="2"/>
+                  <polygon points="50,14 60,20 50,26" fill={C.ink}/>
+                </svg>
+              </div>
+              <div style={{ textAlign: "center", minWidth: 100 }}>
+                <div style={{ border: `2px solid ${C.accent}`, borderRadius: 8, padding: "8px 10px", background: C.accent + "30" }}>
+                  <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 15 }}>WinCC Server</div>
+                  <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 9, opacity: 0.65 }}>continua activo</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ height: 12, margin: "14px 0", backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 14'><path d='M0 7 L 8 3 L 16 9 L 24 4 L 32 8 L 40 3 L 48 9 L 56 5 L 64 8 L 72 3 L 80 9 L 88 4 L 96 8 L 104 3 L 112 9 L 120 4 L 128 8 L 136 3 L 144 9 L 152 5 L 160 8 L 168 3 L 176 9 L 184 4 L 192 8 L 200 5' stroke='%231a1a1a' stroke-width='1.5' fill='none'/></svg>")`, backgroundRepeat: "repeat-x", opacity: 0.35 }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              {[
+                { label: "Ecrã do operador", text: "congelado ou desligado", color: C.red },
+                { label: "WinCC Server", text: "continua — não detecta nada", color: C.accent },
+                { label: "Sistema", text: "não detecta. Não alerta.", color: C.red },
+              ].map(({ label, text, color }) => (
+                <div key={label} style={{ border: `2px solid ${color}`, borderRadius: 8, padding: 10, background: color + "10" }}>
+                  <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 14 }}>{label}</div>
+                  <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 12, marginTop: 4, lineHeight: 1.4 }}>{text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ height: 14, margin: "24px 0", backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 14'><path d='M0 7 L 8 3 L 16 9 L 24 4 L 32 8 L 40 3 L 48 9 L 56 5 L 64 8 L 72 3 L 80 9 L 88 4 L 96 8 L 104 3 L 112 9 L 120 4 L 128 8 L 136 3 L 144 9 L 152 5 L 160 8 L 168 3 L 176 9 L 184 4 L 192 8 L 200 5' stroke='%231a1a1a' stroke-width='1.5' fill='none'/></svg>")`, backgroundRepeat: "repeat-x", opacity: 0.35 }} />
+
+        <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 22, marginBottom: 14 }}>Outras consequências da invisibilidade do RDP</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
+          {[
+            { titulo: "Sem controlo de quem abre a sessão", texto: "Qualquer pessoa com acesso à rede pode estabelecer uma sessão RDP. O WinCC não distingue um operador autorizado de uma ligação não autorizada." },
+            { titulo: "Sem interlocking real", texto: "Dois postos podem aceder à mesma eclusa em simultâneo. O WinCC não tem forma de impedir conflitos de telecomando de sessões RDP diferentes." },
+            { titulo: "Supervisão sem garantias", texto: "O posto de supervisão depende de uma sessão RDP própria. Se cair, o supervisor perde visibilidade — sem qualquer alerta." },
+            { titulo: "Sem registo de sessões", texto: "Não existe histórico de quando cada sessão foi estabelecida, quem a iniciou, ou quando terminou. Zero rastreabilidade em incidentes." },
+          ].map(({ titulo, texto }) => (
+            <div key={titulo} style={{ border: `2px solid ${C.red}`, borderRadius: "10px 14px 8px 12px", padding: 16, background: C.paper }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
+                <div style={{ width: 28, height: 28, border: `2.5px solid ${C.red}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: C.red, fontFamily: "'Caveat', cursive", fontWeight: 900, fontSize: 20, flexShrink: 0 }}>X</div>
+                <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 20, color: C.red, lineHeight: 1 }}>{titulo}</div>
+              </div>
+              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 14, lineHeight: 1.55 }}>{texto}</p>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ border: `3px solid ${C.ink}`, borderRadius: "16px 20px 14px 18px", padding: 24, background: C.navy, color: "white", boxShadow: `6px 6px 0 ${C.ink}` }}>
+          <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 26, color: "white", marginBottom: 10 }}>Resumo do diagnóstico</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {["O WinCC não monitoriza o estado das sessões RDP","Não há controlo de acesso à camada de ligação remota","Conflitos de telecomando são possíveis e não detectados","Perda de supervisão sem alerta ao operador ou sistema","Zero rastreabilidade em caso de incidente","A segurança operacional depende de procedimentos manuais"].map(t => <Cross key={t} text={t} />)}
+          </div>
+        </div>
+      </div>
+      <Aside titulo="Falha RDP" pontos={[
+        { label: "Invisível:", text: "WinCC não sabe quando a sessão cai" },
+        { label: "Sem alerta:", text: "operador e supervisor sem notificação" },
+        { label: "Telecomando em risco:", text: "ordem pode não chegar à eclusa" },
+        { label: "Sem interlocking:", text: "dois postos na mesma eclusa em simultâneo" },
+        { label: "Zero rastreabilidade:", text: "não há log de sessões" },
+      ]} pills={["RDP invisível", "sem alerta", "telecomando", "interlocking"]} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SISTEMA PROPOSTO
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type TopicProposto = "arquitectura" | "resumo" | "simulacao";
+
+function PropostoArquitectura() {
+  const eclusas = [
+    { id: "CL", nome: "Crestuma",   plc: "PLC 1" },
+    { id: "CM", nome: "Carrapatelo",plc: "PLC 2" },
+    { id: "PN", nome: "Pocinho",    plc: "PLC 3" },
+    { id: "RG", nome: "Régua",      plc: "PLC 4" },
+    { id: "VR", nome: "Valeira",    plc: "PLC 5" },
+  ];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 24, height: "calc(100vh - 172px)", overflow: "hidden" }}>
+
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", overflow: "hidden" }}>
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ flexShrink: 0 }}>
+            <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 9, opacity: 0.55 }}>sistema proposto · arquitectura</div>
+            <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 26, lineHeight: 1.05 }}>
+              Arquitectura <span style={{ color: C.navy }}>Proposta</span>
+            </div>
+          </div>
+          <div style={{ flex: 1, height: 2, background: C.ink, opacity: 0.15, borderRadius: 2 }} />
+          {["ESXi mantido", "5 WinCC independentes", "5 mesas", "Rust API"].map(t => (
+            <span key={t} style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 8px", border: `1.5px solid ${C.ink}`, borderRadius: 10, background: C.paper2, color: C.ink, flexShrink: 0 }}>{t}</span>
+          ))}
+        </div>
+
+        {/* LAYER 1 — 5 PLCs com ligação directa */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {eclusas.map((e) => (
+            <div key={e.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 6px", border: `2px solid ${C.ink}`, borderRadius: 10, background: C.paper, boxShadow: `2px 2px 0 ${C.ink}` }}>
+              <img src="/icone_PLC.svg" alt="PLC" style={{ width: 56, height: 56, objectFit: "contain" }} />
+              <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 14, lineHeight: 1 }}>{e.plc}</div>
+              <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 8, opacity: 0.5, lineHeight: 1 }}>{e.id} · {e.nome}</div>
+              <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 9, padding: "1px 8px", border: `1.5px solid ${C.ink}`, borderRadius: 20, background: C.paper2, color: C.ink }}>~1 000 tags</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Arrow 1 — IEC 104 directo */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.4 }} />
+          <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 16px", border: `1.5px solid ${C.ink}`, borderRadius: 20, background: C.paper, color: C.ink, whiteSpace: "nowrap", boxShadow: `1px 1px 0 ${C.ink}` }}>IEC 104 · RTU → WinCC dedicado · ligação directa por eclusa</span>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.4 }} />
+          <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${C.ink}`, opacity: 0.5 }} />
+        </div>
+
+        {/* LAYER 2 — ESXi + 5 WinCC independentes */}
+        <div style={{ border: `1.5px dashed ${C.ink}`, borderRadius: 10, padding: "5px 10px 7px", background: C.paper2 }}>
+          <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 8, opacity: 0.45, textAlign: "center", marginBottom: 4, color: C.ink }}>VMware ESXi · servidor físico · 5 WinCC independentes (antes: 1 servidor + 10 clientes)</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {eclusas.map(e => (
+              <div key={e.id} style={{ flex: 1, border: `2px solid ${C.ink}`, borderRadius: 8, padding: "7px 4px", background: C.paper, boxShadow: `2px 2px 0 ${C.ink}`, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <img src="/icone_Wincc.png" alt="WinCC" style={{ width: 44, height: 44, objectFit: "contain" }} />
+                <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 13, lineHeight: 1, color: C.navy }}>WinCC {e.id}</div>
+                <div style={{ fontFamily: "'Mulish', sans-serif", fontSize: 8, opacity: 0.5, lineHeight: 1, textAlign: "center" }}>server + client</div>
+                <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 7.5, opacity: 0.45, lineHeight: 1 }}>{e.nome}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Arrow 2 — wincc-api (Rust) */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 16px", border: `2px solid ${C.navy}`, borderRadius: 20, background: C.navy, color: "white", whiteSpace: "nowrap", boxShadow: `2px 2px 0 ${C.ink}` }}>wincc-api (Rust/Axum) · Gestão de Acessos RDP · Auditoria · Streaming</span>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${C.ink}`, opacity: 0.4 }} />
+        </div>
+
+        {/* LAYER 3 — wincc-api funcionalidades */}
+        <div style={{ border: `2px solid ${C.navy}`, borderRadius: 10, padding: "7px 12px", background: C.navy + "08", display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: "4px 8px" }}>
+          {[
+            { emoji: "🔐", t: "Autenticação por operador em cada sessão RDP" },
+            { emoji: "🔒", t: "Interlocking — 1 operador por eclusa de cada vez" },
+            { emoji: "📡", t: "Streaming de ecrã via eclusa-streamer (Rust)" },
+            { emoji: "📋", t: "Auditoria completa · SQLite · histórico de sessões" },
+            { emoji: "👁", t: "Shadow view para supervisão sem intervenção" },
+          ].map(({ emoji, t }) => (
+            <div key={t} style={{ display: "flex", gap: 5, alignItems: "flex-start", padding: "3px 4px" }}>
+              <span style={{ fontSize: 12, flexShrink: 0 }}>{emoji}</span>
+              <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 10, lineHeight: 1.3, margin: 0, opacity: 0.8 }}>{t}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Arrow 3 — RDP gerido */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, padding: "2px 16px", border: `1.5px solid ${C.green}`, borderRadius: 20, background: C.paper, color: C.green, whiteSpace: "nowrap", boxShadow: `1px 1px 0 ${C.green}` }}>RDP gerido · sessão autenticada · interlocking activo</span>
+          <div style={{ width: 1.5, height: 8, background: C.ink, opacity: 0.3 }} />
+          <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${C.ink}`, opacity: 0.4 }} />
+        </div>
+
+        {/* LAYER 4 — 5 Mesas (1 Mini PC cada) */}
+        <div>
+          <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 8, opacity: 0.35, textAlign: "center", marginBottom: 4 }}>5 postos · 1 Mini PC por mesa · cada posto ligado à sua eclusa dedicada</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {eclusas.map((e, n) => (
+              <div key={e.id} style={{ flex: 1, border: `2px solid ${C.green}`, borderRadius: "12px 10px 14px 8px", padding: "7px 4px 6px", textAlign: "center", background: C.green + "10", boxShadow: `3px 3px 0 ${C.green}` }}>
+                <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 17, color: C.green }}>Mesa {n+1}</div>
+                <div style={{ fontFamily: "'Mulish', sans-serif", fontSize: 9, opacity: 0.55, marginTop: 1 }}>1 Mini PC</div>
+                <div style={{ marginTop: 4, border: `1px solid ${C.green}`, borderRadius: 20, padding: "1px 6px", background: C.paper, display: "inline-block" }}>
+                  <span style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 10, color: C.green }}>WinCC {e.id}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Ganhos */}
+        <div style={{ borderTop: `1.5px dashed ${C.green}`, paddingTop: 8 }}>
+          <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 15, color: C.green, marginBottom: 5 }}>Ganhos desta arquitectura</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px 14px" }}>
+            {[
+              { n: "✓", t: "Sem ponto único de falha — cada eclusa é independente" },
+              { n: "✓", t: "IEC 104 directo → sem latências díspares entre VLANs" },
+              { n: "✓", t: "Sem NetDDE/DCOM — protocolo moderno e fiável" },
+              { n: "✓", t: "Scripts WinCC isolados por eclusa — sem race conditions" },
+              { n: "✓", t: "Interlocking e auditoria completa via wincc-api" },
+              { n: "✓", t: "De 11 VMs para 5 — menos licenças, mais performance" },
+            ].map(({ n, t }) => (
+              <div key={t} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+                <div style={{ width: 17, height: 17, border: `1.5px solid ${C.green}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 12, flexShrink: 0, color: C.green }}>{n}</div>
+                <p style={{ fontFamily: "'Mulish', sans-serif", fontSize: 11, lineHeight: 1.3, margin: 0, opacity: 0.8 }}>{t}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Aside */}
+      <Aside titulo="Proposta" pontos={[
+        { label: "ESXi:", text: "mantido — mesmo servidor físico" },
+        { label: "5 WinCC:", text: "um por eclusa, server+client numa só VM" },
+        { label: "IEC 104:", text: "ligação directa PLC → WinCC dedicado" },
+        { label: "Rust API:", text: "wincc-api gere acessos RDP, audit, streaming" },
+        { label: "5 Mesas:", text: "1 Mini PC cada — posto dedicado à eclusa" },
+        { label: "Ganho:", text: "de 11 VMs para 5 · sem NetDDE · sem concorrência" },
+      ]} pills={["ESXi", "5 WinCC", "Rust API", "IEC 104"]} />
+
+    </div>
+  );
+}
+
+function PropostoResumo() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 36, alignItems: "start" }}>
+      <div>
+        <TopicHeader cor={C.green} label="sistema proposto · tópico" titulo={<>Resumo dos <span style={{ color: C.green }}>Ganhos</span></>} sub="o que o EDP Acessos resolve" />
+
+        <div style={{ border: `3px solid ${C.ink}`, borderRadius: "16px 20px 14px 18px", padding: 28, background: C.navy, color: "white", boxShadow: `6px 6px 0 ${C.ink}`, marginBottom: 24 }}>
+          <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 30, color: "white", marginBottom: 16 }}>O que o EDP Acessos resolve</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              "Autenticação obrigatória — sem registo no sistema não há acesso RDP",
+              "Passwords com hash SHA-256 — nunca armazenadas em texto claro",
+              "Dois níveis: utilizadores de gestão (admin) e operadores por eclusa",
+              "Acesso não autorizado: desconexão imediata + IP bloqueado no firewall",
+              "IP desbloqueado automaticamente quando sessão autorizada é iniciada",
+              "O mesmo operador bloqueado se já tiver sessão activa noutro posto",
+              "Interlocking real: 1 operador por eclusa, conflito tecnicamente impossível",
+              "Shadow View directo ao Windows Server 2022 — sem VMs de supervisão adicionais",
+              "WinCC escreve estado SCADA directamente na API via HTTP — painel unificado",
+              "Auditoria SQLite + SSE em tempo real — rastreabilidade total",
+              "Eliminação do DCOM/NetDDE — protocolo legado removido da arquitectura",
+              "Scripts isolados por VM: sem concorrência de execução entre eclusas",
+            ].map(t => <Check key={t} text={t} />)}
+          </div>
+        </div>
+
+        <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 22, marginBottom: 14 }}>Antes e depois — comparação completa</div>
+        {(() => {
+          const pares: [string, string][] = [
+            ["Qualquer utilizador acede via RDP sem qualquer validação", "Autenticação obrigatória — sem registo no sistema, sem acesso"],
+            ["Credenciais em texto claro — sem gestão de utilizadores", "Passwords com hash SHA-256 — nunca armazenadas em texto claro"],
+            ["Sem distinção entre administrador e operador", "Dois níveis de acesso: administradores e operadores por eclusa"],
+            ["Acesso não autorizado passa despercebido — sem resposta", "Desconexão imediata e IP adicionado automaticamente à lista negra"],
+            ["IP bloqueado permanece bloqueado indefinidamente", "IP desbloqueado de forma automática quando uma sessão válida é iniciada"],
+            ["Sem interlocking — dois postos podem controlar a mesma eclusa", "Interlocking real: um operador por eclusa, conflito tecnicamente impossível"],
+            ["O mesmo operador pode abrir sessões simultâneas em vários postos", "Operador bloqueado se já tiver uma sessão activa noutro posto"],
+            ["1 WinCC Server centralizado gere 5 PLCs via VLANs partilhadas", "1 WinCC por eclusa com IEC 104 directo ao seu PLC — sem VLANs partilhadas"],
+            ["DCOM/NetDDE distribui imagens e dados por toda a rede corporativa", "Eliminação total do DCOM — cada VM corre o seu projecto WinCC de forma autónoma"],
+            ["WinCC sem visibilidade centralizada do estado operacional das eclusas", "WinCC escreve o estado SCADA (LIVRE / OPERAÇÃO / TELECOMANDO) directamente na API"],
+            ["Supervisão remota exige VMs WinCC Client adicionais", "Shadow View directo ao Windows Server 2022 — sem VMs de supervisão adicionais"],
+            ["Zero rastreabilidade — nenhum registo de acessos ou eventos", "Auditoria completa em SQLite com alertas SSE em tempo real no painel de gestão"],
+          ];
+          return (
+            <div style={{ display: "flex", border: `2.5px solid ${C.ink}`, borderRadius: 12, overflow: "hidden", boxShadow: `4px 4px 0 ${C.ink}` }}>
+              {/* COLUNA ESQUERDA — Actual / vermelho */}
+              <div style={{ flex: 1, borderRight: `2px solid ${C.ink}` }}>
+                <div style={{ background: C.red, padding: "10px 16px" }}>
+                  <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 18, color: "white" }}>Actual — Centralizado</div>
+                </div>
+                {pares.map(([atual], i) => (
+                  <div key={i} style={{ padding: "8px 14px", borderTop: `1.5px solid ${C.ink}`, background: i % 2 === 0 ? C.paper : C.paper2 }}>
+                    <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, color: C.red }}>✗ {atual}</span>
+                  </div>
+                ))}
+              </div>
+              {/* COLUNA DIREITA — Proposto / verde */}
+              <div style={{ flex: 1 }}>
+                <div style={{ background: C.green, padding: "10px 16px" }}>
+                  <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 18, color: "white" }}>Proposto — EDP Acessos</div>
+                </div>
+                {pares.map(([, proposto], i) => (
+                  <div key={i} style={{ padding: "8px 14px", borderTop: `1.5px solid ${C.ink}`, background: i % 2 === 0 ? C.paper : C.paper2 }}>
+                    <span style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, color: C.green }}>✓ {proposto}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+      <Aside titulo="Ganhos totais" pontos={[
+        { label: "SHA-256:", text: "passwords com hash — nunca em texto claro" },
+        { label: "2 níveis:", text: "admin (utilizadores) + operadores por eclusa" },
+        { label: "Blacklist:", text: "IP bloqueado/desbloqueado automaticamente" },
+        { label: "Sem DCOM:", text: "protocolo legado eliminado da arquitectura" },
+        { label: "1 WinCC : 1 PLC:", text: "IEC 104 directo, sem VLANs partilhadas" },
+        { label: "SCADA API:", text: "WinCC escreve estado directamente na API" },
+        { label: "Shadow View:", text: "directo ao Windows Server 2022, sem VMs" },
+        { label: "Auditoria:", text: "SQLite + SSE — rastreabilidade total" },
+      ]} pills={["SHA-256", "blacklist", "sem DCOM", "1:1 PLC", "shadow view"]} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SIMULAÇÃO INTERACTIVA
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PropostoSimulacao() {
+  const [leftSteps,   setLeftSteps]   = useState<{ text: string; color: string }[]>([]);
+  const [leftRunning, setLeftRunning] = useState(false);
+  const [rightSteps,  setRightSteps]  = useState<{ text: string; color: string }[]>([]);
+  const [rightRunning,setRightRunning]= useState(false);
+  const [scenario,    setScenario]    = useState<"none" | "unauth" | "auth">("none");
+  const [username,    setUsername]    = useState("op_eclusa3");
+  const [password,    setPassword]    = useState("Seg2026!");
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+
+  function clearTimers() { timers.current.forEach(clearTimeout); timers.current = []; }
+
+  function animate(
+    setter: React.Dispatch<React.SetStateAction<{ text: string; color: string }[]>>,
+    steps: { text: string; color: string }[],
+    onDone: () => void,
+  ) {
+    steps.forEach((s, i) => {
+      const t = setTimeout(() => {
+        setter(prev => [...prev, s]);
+        if (i === steps.length - 1) onDone();
+      }, (i + 1) * 700);
+      timers.current.push(t);
+    });
+  }
+
+  function runLeft() {
+    if (leftRunning) return;
+    clearTimers();
+    setLeftSteps([]);
+    setLeftRunning(true);
+    animate(setLeftSteps, [
+      { text: "Pedido de sessão RDP recebido de 172.29.164.54...", color: C.ink },
+      { text: "Verificação de credenciais... (nenhuma exigida)", color: C.muted },
+      { text: "✓ Sem validação — acesso imediato concedido", color: C.red },
+      { text: "Sessão RDP estabelecida — Windows Server 2022", color: C.red },
+      { text: "⚠  Outro operador já activo na Eclusa 3 — conflito não detectado", color: C.red },
+      { text: "⚠  Nenhum registo de acesso — rastreabilidade zero", color: C.red },
+    ], () => setLeftRunning(false));
+  }
+
+  function runUnauth() {
+    if (rightRunning) return;
+    clearTimers();
+    setRightSteps([]);
+    setRightRunning(true);
+    setScenario("unauth");
+    animate(setRightSteps, [
+      { text: "Pedido de acesso recebido de 172.29.164.54...", color: C.ink },
+      { text: "A verificar identidade na base de dados SQLite...", color: C.ink },
+      { text: "✗ Utilizador não registado no sistema", color: C.red },
+      { text: "Forçar desconexão imediata via tsdiscon...", color: C.red },
+      { text: "PowerShell: New-NetFirewallRule → IP 172.29.164.54 bloqueado", color: C.red },
+      { text: "⛔ IP adicionado à lista negra do firewall", color: C.red },
+      { text: "Evento registado em auditoria SQLite", color: C.muted },
+      { text: "Alerta SSE emitido para o painel de gestão", color: C.muted },
+    ], () => setRightRunning(false));
+  }
+
+  function runAuth() {
+    if (rightRunning) return;
+    clearTimers();
+    setRightSteps([]);
+    setRightRunning(true);
+    setScenario("auth");
+    const u = username.trim() || "op_eclusa3";
+    animate(setRightSteps, [
+      { text: `Pedido de autenticação: utilizador "${u}"`, color: C.ink },
+      { text: "A calcular SHA-256(username:password)...", color: C.ink },
+      { text: "✓ Hash verificado — credenciais válidas", color: C.green },
+      { text: "A verificar sessões activas para este operador...", color: C.ink },
+      { text: "✓ Sem sessão activa noutro posto — sem conflito de duplicado", color: C.green },
+      { text: "A verificar interlocking — Eclusa 3 disponível?", color: C.ink },
+      { text: "✓ Eclusa 3 livre — nenhum operador atribuído", color: C.green },
+      { text: "IP 172.29.164.54 removido da lista negra do firewall", color: C.green },
+      { text: `✅ Sessão RDP autorizada — Eclusa 3 atribuída a "${u}"`, color: C.green },
+      { text: "Estado SCADA → OPERAÇÃO_LOCAL enviado à API via HTTP POST", color: C.blue },
+      { text: "Evento registado em SQLite + alerta SSE emitido em tempo real", color: C.muted },
+    ], () => setRightRunning(false));
+  }
+
+  function resetAll() {
+    clearTimers();
+    setLeftSteps([]); setRightSteps([]);
+    setLeftRunning(false); setRightRunning(false);
+    setScenario("none");
+  }
+
+  const rightDone = !rightRunning && rightSteps.length > 0;
+  const rightBg   = rightDone ? (scenario === "unauth" ? `${C.red}0D` : `${C.green}0D`) : "white";
+
+  const logRow = (s: { text: string; color: string }, i: number) => (
+    <div key={i} style={{ color: s.color, marginBottom: 7, display: "flex", gap: 8, alignItems: "flex-start" }}>
+      <span style={{ color: C.muted, flexShrink: 0, fontSize: 11, fontFamily: "monospace" }}>{String(i + 1).padStart(2, "0")}</span>
+      <span style={{ fontFamily: "monospace", fontSize: 12.5 }}>{s.text}</span>
+    </div>
+  );
+
+  const btnBase: React.CSSProperties = {
+    fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 14,
+    border: `2px solid ${C.ink}`, padding: "8px 20px",
+    borderRadius: "10px 8px 12px 8px", boxShadow: `2px 2px 0 ${C.ink}`,
+    cursor: "pointer", color: "white", transition: "opacity .15s",
+  };
+
+  return (
+    <div>
+      <TopicHeader cor={C.blue} label="Sistema Proposto · EDP Acessos" titulo="Simulação Interactiva" sub="Demonstração passo a passo — sistema actual vs. EDP Acessos" />
+
+      <div style={{ display: "flex", border: `2.5px solid ${C.ink}`, borderRadius: 14, overflow: "hidden", boxShadow: `4px 4px 0 ${C.ink}` }}>
+
+        {/* ── Esquerda: sistema actual ──────────────────────────────── */}
+        <div style={{ flex: 1, borderRight: `2px solid ${C.ink}`, display: "flex", flexDirection: "column" }}>
+          <div style={{ background: C.red, padding: "12px 18px" }}>
+            <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 18, color: "white" }}>Sistema Actual — Sem Autenticação</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,.75)", marginTop: 2 }}>RDP directo ao servidor · sem validação · sem registo</div>
+          </div>
+          <div style={{ padding: "12px 16px", borderBottom: `1.5px dashed ${C.ink}`, background: C.paper2 }}>
+            <button
+              onClick={runLeft}
+              disabled={leftRunning}
+              style={{ ...btnBase, background: leftRunning ? C.muted : C.red, cursor: leftRunning ? "not-allowed" : "pointer" }}
+            >
+              {leftRunning ? "A simular..." : "▶  Aceder via RDP (sem credenciais)"}
+            </button>
+          </div>
+          <div style={{ flex: 1, padding: "14px 16px", minHeight: 290, background: leftSteps.length > 0 ? `${C.red}09` : "white", transition: "background .3s" }}>
+            {leftSteps.length === 0
+              ? <div style={{ color: C.muted, fontFamily: "'Mulish', sans-serif", fontSize: 13 }}>Clique em "Aceder via RDP" para iniciar a simulação.</div>
+              : leftSteps.map(logRow)}
+          </div>
+        </div>
+
+        {/* ── Direita: EDP Acessos ──────────────────────────────────── */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <div style={{ background: C.navy, padding: "12px 18px" }}>
+            <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 18, color: "white" }}>EDP Acessos — Com Autenticação</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,.65)", marginTop: 2 }}>SHA-256 · interlocking · blacklist · auditoria SQLite</div>
+          </div>
+          <div style={{ padding: "12px 16px", borderBottom: `1.5px dashed ${C.ink}`, background: C.paper2, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="Utilizador"
+                style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, border: `1.5px solid ${C.ink}`, borderRadius: 6, padding: "5px 10px", flex: 1, background: "white" }}
+              />
+              <input
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                type="password"
+                placeholder="Password"
+                style={{ fontFamily: "'Mulish', sans-serif", fontSize: 13, border: `1.5px solid ${C.ink}`, borderRadius: 6, padding: "5px 10px", flex: 1, background: "white" }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={runUnauth}
+                disabled={rightRunning}
+                style={{ ...btnBase, flex: 1, fontSize: 13, padding: "7px 10px", background: rightRunning ? C.muted : C.red, cursor: rightRunning ? "not-allowed" : "pointer" }}
+              >✗  Sem credenciais válidas</button>
+              <button
+                onClick={runAuth}
+                disabled={rightRunning}
+                style={{ ...btnBase, flex: 1, fontSize: 13, padding: "7px 10px", background: rightRunning ? C.muted : C.green, cursor: rightRunning ? "not-allowed" : "pointer" }}
+              >✓  Credenciais válidas</button>
+            </div>
+          </div>
+          <div style={{ flex: 1, padding: "14px 16px", minHeight: 290, background: rightBg, transition: "background .3s" }}>
+            {rightSteps.length === 0
+              ? <div style={{ color: C.muted, fontFamily: "'Mulish', sans-serif", fontSize: 13 }}>Escolha um cenário acima para iniciar a simulação.</div>
+              : rightSteps.map(logRow)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={resetAll}
+          style={{ fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 13, background: C.paper, color: C.ink, border: `1.5px solid ${C.ink}`, padding: "6px 18px", borderRadius: "10px 8px 12px 8px", cursor: "pointer", boxShadow: `2px 2px 0 ${C.ink}` }}
+        >↺  Repor simulação</button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENTE PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type TabMain = "actual" | "proposto";
+
+const TOPICS_ACTUAL: { id: TopicActual; label: string }[] = [
+  { id: "arquitectura",  label: "Arquitectura" },
+  { id: "falha-rdp",    label: "Falha RDP" },
+];
+
+const TOPICS_PROPOSTO: { id: TopicProposto; label: string }[] = [
+  { id: "arquitectura", label: "Arquitectura" },
+  { id: "resumo",       label: "Resumo & Ganhos" },
+  { id: "simulacao",    label: "Simulação" },
+];
 
 export default function Apresentacao() {
-  const [tab, setTab] = useState<Tab>("actual");
+  const [tab, setTab] = useState<TabMain>("actual");
+  const [topicActual, setTopicActual] = useState<TopicActual>("arquitectura");
+  const [topicProposto, setTopicProposto] = useState<TopicProposto>("arquitectura");
+
+  const accent = tab === "actual" ? C.red : C.green;
 
   return (
     <div style={{
@@ -748,44 +798,72 @@ export default function Apresentacao() {
     }}>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Kalam:wght@400;700&family=Gloria+Hallelujah&family=Mulish:wght@400;600;700&display=swap" />
 
+      {/* ── Chrome principal ─────────────────────────────────────────────── */}
       <div style={{
-        position: "sticky", top: 0, zIndex: 10,
+        position: "sticky", top: 0, zIndex: 20,
         background: C.paper, borderBottom: `2px solid ${C.ink}`,
-        padding: "16px 28px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap",
+        padding: "14px 28px", display: "flex", alignItems: "baseline", gap: 22, flexWrap: "wrap",
       }}>
         <div>
-          <Hand style={{ fontSize: 30, lineHeight: 1 }}>EDP Acessos · Apresentacao do Sistema</Hand>
-          <Note style={{ marginTop: 2 }}>controlo de sessoes RDP e acessos SCADA · eclusas de navegacao</Note>
+          <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 30, lineHeight: 1 }}>EDP Acessos · Apresentação</div>
+          <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 12, opacity: 0.65, marginTop: 2 }}>controlo de sessões RDP e acessos SCADA · eclusas de navegação</div>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
           {([
-            { id: "actual" as Tab, label: "X Sistema Actual", activeColor: C.red },
-            { id: "proposto" as Tab, label: "V Sistema Proposto", activeColor: C.green },
-          ]).map(({ id, label, activeColor }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              style={{
-                fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 15,
-                background: tab === id ? activeColor : C.paper,
-                color: tab === id ? "white" : C.ink,
-                border: `2.5px solid ${tab === id ? activeColor : C.ink}`,
-                padding: "8px 20px",
-                borderRadius: "22px 18px 24px 16px",
-                cursor: "pointer",
-                boxShadow: tab === id ? `3px 3px 0 ${C.ink}` : `2px 2px 0 rgba(0,0,0,0.15)`,
-                transition: "all .15s",
-              }}
-            >
-              {label}
-            </button>
+            { id: "actual"   as TabMain, label: "Sistema Actual",   color: C.red },
+            { id: "proposto" as TabMain, label: "Sistema Proposto", color: C.green },
+          ]).map(({ id, label, color }) => (
+            <button key={id} onClick={() => setTab(id)} style={{
+              fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 14,
+              background: tab === id ? color : C.paper,
+              color: tab === id ? "white" : C.ink,
+              border: `2px solid ${tab === id ? color : C.ink}`,
+              padding: "6px 18px", borderRadius: "22px 18px 24px 16px",
+              cursor: "pointer", boxShadow: tab === id ? `3px 3px 0 ${C.ink}` : `2px 2px 0 rgba(0,0,0,0.15)`,
+              transition: "all .15s",
+            }}>{label}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: "36px 48px 100px" }}>
-        {tab === "actual"   && <SistemaActual />}
-        {tab === "proposto" && <SistemaProposto />}
+      {/* ── Sub-nav por tópico ────────────────────────────────────────────── */}
+      <div style={{
+        position: "sticky", top: 80, zIndex: 10,
+        background: C.paper2, borderBottom: `1.5px dashed ${C.ink}`,
+        padding: "10px 28px", display: "flex", gap: 8, flexWrap: "wrap",
+      }}>
+        {tab === "actual" && TOPICS_ACTUAL.map(({ id, label }) => (
+          <button key={id} onClick={() => setTopicActual(id)} style={{
+            fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 13,
+            background: topicActual === id ? accent : C.paper,
+            color: topicActual === id ? "white" : C.ink,
+            border: `1.5px solid ${topicActual === id ? accent : C.ink}`,
+            padding: "5px 14px", borderRadius: "16px 12px 18px 10px",
+            cursor: "pointer", boxShadow: topicActual === id ? `2px 2px 0 ${C.ink}` : "none",
+            transition: "all .12s",
+          }}>{label}</button>
+        ))}
+        {tab === "proposto" && TOPICS_PROPOSTO.map(({ id, label }) => (
+          <button key={id} onClick={() => setTopicProposto(id)} style={{
+            fontFamily: "'Kalam', cursive", fontWeight: 700, fontSize: 13,
+            background: topicProposto === id ? accent : C.paper,
+            color: topicProposto === id ? "white" : C.ink,
+            border: `1.5px solid ${topicProposto === id ? accent : C.ink}`,
+            padding: "5px 14px", borderRadius: "16px 12px 18px 10px",
+            cursor: "pointer", boxShadow: topicProposto === id ? `2px 2px 0 ${C.ink}` : "none",
+            transition: "all .12s",
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* ── Conteúdo ─────────────────────────────────────────────────────── */}
+      <div style={{ padding: "20px 40px 20px" }}>
+        {tab === "actual"   && topicActual === "arquitectura"  && <ActualArquitectura />}
+        {tab === "actual"   && topicActual === "falha-rdp"     && <ActualFalhaRDP />}
+
+        {tab === "proposto" && topicProposto === "arquitectura" && <PropostoArquitectura />}
+        {tab === "proposto" && topicProposto === "resumo"       && <PropostoResumo />}
+        {tab === "proposto" && topicProposto === "simulacao"    && <PropostoSimulacao />}
       </div>
     </div>
   );
