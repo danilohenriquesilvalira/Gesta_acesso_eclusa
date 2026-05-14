@@ -1,64 +1,74 @@
 use axum::{
-    extract::{ConnectInfo, Path, State},
+    async_trait,
+    extract::{ConnectInfo, FromRequestParts, Path, State},
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    http::{request::Parts, StatusCode},
     response::{Json, Sse},
     response::sse::{Event, KeepAlive},
     routing::{delete, get, post},
-    http::StatusCode,
     Router,
 };
-use std::{convert::Infallible, net::SocketAddr};
-use chrono::Local;
-use rusqlite::Connection;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use argon2::password_hash::{rand_core::OsRng, SaltString};
+use chrono::{Local, Utc};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
-use std::{collections::HashMap, fs, process::Command, sync::Arc};
+use sqlx::{PgPool, postgres::PgPoolOptions, Row};
+use std::{
+    collections::HashMap, convert::Infallible, fs, net::SocketAddr,
+    process::Command, sync::Arc,
+};
 use tokio::sync::{broadcast, RwLock};
 use tokio_stream::{wrappers::BroadcastStream, Stream, StreamExt as _};
-use tower_http::compression::CompressionLayer;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{compression::CompressionLayer, cors::{Any, CorsLayer}};
+use uuid::Uuid;
 
 const ECLUSAS_FILE:       &str = r"C:\wincc_state\eclusas.json";
-const DB_FILE:            &str = r"C:\wincc_state\wincc_acesso.db";
 const RDP_POLL_SECS:      u64  = 2;
 const STARTUP_GRACE_SECS: u64  = 30;
+const JWT_EXPIRY_HOURS:   i64  = 8;
+const DB_POOL_MAX:        u32  = 10;
 
-// Estados de eclusa — usados pelo WinCC ao escrever no API
+// ── Eclusa status constants (used by WinCC) ───────────────────────────────────
 pub mod eclusa_status {
     pub const LIVRE:          i32 = 0;
     pub const OPERACAO_LOCAL: i32 = 1;
     pub const TELECOMANDO:    i32 = 2;
 }
 
-// ── Config ────────────────────────────────────────────────────────────────────
+// ── Config — loaded from .env, never hardcoded ────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 struct Config {
+    database_url: String,
+    jwt_secret:   String,
     rdp_user:     String,
     rdp_password: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config { rdp_user: "Administrator".into(), rdp_password: "Rls@2024".into() }
-    }
+    api_port:     String,
 }
 
 fn load_config() -> Config {
-    std::env::current_exe().ok()
-        .and_then(|p| p.parent().map(|d| d.join("config.json")))
-        .and_then(|p| fs::read_to_string(p).ok())
-        .and_then(|c| serde_json::from_str(&c).ok())
-        .unwrap_or_default()
+    let _ = dotenvy::dotenv();
+    let rdp_user     = std::env::var("RDP_USER").unwrap_or_else(|_| "Administrator".into());
+    let rdp_password = std::env::var("RDP_PASSWORD")
+        .expect("RDP_PASSWORD must be set in environment (not in source code)");
+    let jwt_secret   = std::env::var("JWT_SECRET")
+        .expect("JWT_SECRET must be set in environment");
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set in environment");
+    let api_port     = std::env::var("API_PORT").unwrap_or_else(|_| "8080".into());
+    Config { database_url, jwt_secret, rdp_user, rdp_password, api_port }
 }
 
-const CLIENTES_IPS: [(&str, &str); 2] = [
-    ("cliente1", "172.29.164.49"),
-    ("cliente2", "172.29.164.51"),
-];
+fn load_client_ips() -> Vec<(String, String)> {
+    vec![
+        ("cliente1".into(), std::env::var("CLIENT1_IP").unwrap_or_else(|_| "172.29.164.49".into())),
+        ("cliente2".into(), std::env::var("CLIENT2_IP").unwrap_or_else(|_| "172.29.164.51".into())),
+    ]
+}
 
-// ── Tipos ─────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct Sessao {
@@ -82,54 +92,149 @@ struct RdpInfo {
 struct Sessoes { cliente1: Sessao, cliente2: Sessao }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct Supervisao {
-    supervisor: String,
-    timestamp:  String,
-}
+struct Supervisao { supervisor: String, timestamp: String }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct Supervisoes { cliente1: Vec<Supervisao>, cliente2: Vec<Supervisao> }
 
-#[derive(Debug, Clone)]
-struct AppState {
+// Inner mutable state — protected by RwLock
+#[derive(Debug, Default)]
+struct AppStateInner {
     sessoes:     Sessoes,
     supervisoes: Supervisoes,
     rdp:         HashMap<String, RdpInfo>,
     operadores:  Vec<String>,
-    startup:     std::time::Instant,
-    sse_tx:      broadcast::Sender<String>,
-    frame_tx:    HashMap<String, broadcast::Sender<Vec<u8>>>,
+    startup:     Option<std::time::Instant>,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
-        let (sse_tx, _) = broadcast::channel(64);
-        let mut frame_tx = HashMap::new();
-        for (cliente, _) in &CLIENTES_IPS {
-            let (tx, _) = broadcast::channel::<Vec<u8>>(8);
-            frame_tx.insert(cliente.to_string(), tx);
+// AppState — db pool and broadcast channels are already thread-safe (no RwLock needed)
+struct AppState {
+    inner:      RwLock<AppStateInner>,
+    db:         PgPool,
+    sse_tx:     broadcast::Sender<String>,
+    frame_tx:   HashMap<String, broadcast::Sender<Vec<u8>>>,
+    cfg:        Config,
+    client_ips: Vec<(String, String)>,   // (id, ip) — loaded once at startup
+}
+
+type Shared = Arc<AppState>;
+
+// ── JWT Claims ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Claims {
+    sub:  String,   // username
+    role: String,   // admin | operator | supervisor
+    jti:  String,   // token ID for revocation
+    exp:  usize,
+    iat:  usize,
+}
+
+fn make_token(username: &str, role: &str, secret: &str) -> Result<String, jsonwebtoken::errors::Error> {
+    let now = Utc::now().timestamp() as usize;
+    let claims = Claims {
+        sub:  username.to_string(),
+        role: role.to_string(),
+        jti:  Uuid::new_v4().to_string(),
+        iat:  now,
+        exp:  now + (JWT_EXPIRY_HOURS as usize) * 3600,
+    };
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+}
+
+fn verify_token(token: &str, secret: &str) -> Option<Claims> {
+    decode::<Claims>(token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::new(Algorithm::HS256))
+        .ok()
+        .map(|d| d.claims)
+}
+
+// ── Auth extractor — validates JWT on every protected request ─────────────────
+
+#[derive(Debug, Clone)]
+struct AuthUser {
+    username: String,
+    role:     String,
+    jti:      String,
+}
+
+#[async_trait]
+impl FromRequestParts<Shared> for AuthUser {
+    type Rejection = (StatusCode, Json<Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &Shared) -> Result<Self, Self::Rejection> {
+        let token = parts.headers
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .ok_or_else(|| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "erro": "Token em falta"}))))?;
+
+        let claims = verify_token(token, &state.cfg.jwt_secret)
+            .ok_or_else(|| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "erro": "Token inválido ou expirado"}))))?;
+
+        // Check token not revoked
+        let revoked: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1)"
+        )
+        .bind(&claims.jti)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false);
+
+        if revoked {
+            return Err((StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "erro": "Token revogado"}))));
         }
-        AppState {
-            sessoes:     Sessoes::default(),
-            supervisoes: Supervisoes::default(),
-            rdp:         HashMap::default(),
-            operadores:  Vec::default(),
-            startup:     std::time::Instant::now(),
-            sse_tx,
-            frame_tx,
-        }
+
+        Ok(AuthUser { username: claims.sub, role: claims.role, jti: claims.jti })
     }
 }
 
-// ── Request types ─────────────────────────────────────────────────────────────
+// Admin-only guard
+struct AdminUser(AuthUser);
 
-#[derive(Debug, Deserialize)] struct IniciarReq             { cliente: String, operador: String }
-#[derive(Debug, Deserialize)] struct EncerrarReq            { cliente: String }
-#[derive(Debug, Deserialize)] struct SupervisaoReq          { cliente: String, supervisor: String }
-#[derive(Debug, Deserialize)] struct EncerrarSupervisaoReq  { cliente: String, supervisor: String }
-#[derive(Debug, Deserialize)] struct OperadorReq            { nome: String }
-#[derive(Debug, Deserialize)] struct LoginReq               { username: String, password: String }
-#[derive(Debug, Deserialize)] struct UsuarioReq             { username: String, password: String }
+#[async_trait]
+impl FromRequestParts<Shared> for AdminUser {
+    type Rejection = (StatusCode, Json<Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &Shared) -> Result<Self, Self::Rejection> {
+        let user = AuthUser::from_request_parts(parts, state).await?;
+        if user.role != "admin" {
+            return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "erro": "Acesso negado — apenas administradores"}))));
+        }
+        Ok(AdminUser(user))
+    }
+}
+
+// ── Request body types ────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)] struct IniciarReq            { cliente: String, operador: String }
+#[derive(Debug, Deserialize)] struct EncerrarReq           { cliente: String }
+#[derive(Debug, Deserialize)] struct SupervisaoReq         { cliente: String, supervisor: String }
+#[derive(Debug, Deserialize)] struct EncerrarSupervisaoReq { cliente: String, supervisor: String }
+#[derive(Debug, Deserialize)] struct OperadorReq           { nome: String }
+#[derive(Debug, Deserialize)] struct LoginReq              { username: String, password: String }
+
+#[derive(Debug, Deserialize)]
+struct CreateUserReq {
+    username:     String,
+    password:     String,
+    role:         Option<String>,
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateUserReq {
+    display_name:     Option<String>,
+    role:             Option<String>,
+    status:           Option<String>,
+    blocked_reason:   Option<String>,
+    allowed_eclusas:  Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BlacklistReq {
+    ip:     String,
+    reason: Option<String>,
+}
 
 #[derive(Debug, Deserialize)]
 struct EclusaEstadoReq {
@@ -139,183 +244,251 @@ struct EclusaEstadoReq {
     usuario: String,
 }
 
-// RwLock: múltiplas leituras paralelas sem bloquear; escritas exclusivas apenas quando necessário
-type Shared = Arc<RwLock<AppState>>;
-
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() {
-    if let Err(e) = init_db() {
-        println!("[{}] AVISO SQLite: {}", now(), e);
+    let cfg = load_config();
+
+    // PostgreSQL connection pool
+    let db = PgPoolOptions::new()
+        .max_connections(DB_POOL_MAX)
+        .acquire_timeout(std::time::Duration::from_secs(10))
+        .connect(&cfg.database_url)
+        .await
+        .expect("Falha ao conectar ao PostgreSQL");
+
+    // Verify schema is up to date
+    sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&db).await
+        .expect("Schema PostgreSQL em falta — execute infra/db/schema.sql");
+
+    // Load operators from DB
+    let operadores = load_operadores_db(&db).await;
+
+    // Setup broadcast channels
+    let (sse_tx, _) = broadcast::channel::<String>(128);
+    let mut frame_tx = HashMap::new();
+    for cliente in &["cliente1", "cliente2", "cliente3", "cliente4", "cliente5"] {
+        let (tx, _) = broadcast::channel::<Vec<u8>>(8);
+        frame_tx.insert(cliente.to_string(), tx);
     }
-    let operadores   = ler_operadores_db();
-    let _total_users = contar_usuarios_db().unwrap_or(0);
 
-    let cfg_startup = load_config();
-    for (_, ip) in &CLIENTES_IPS {
-        limpar_bloqueios_firewall(ip, &cfg_startup);
-        configurar_shadow_servidor(ip, &cfg_startup); // shadow view-only sem consentimento
-    }
+    let client_ips = load_client_ips();
 
-    let state: Shared = Arc::new(RwLock::new(AppState { operadores, ..Default::default() }));
-
-    // Polling RDP — paralelo nos dois servidores, só loga quando muda
-    let state_bg = state.clone();
-    tokio::spawn(async move {
-        loop {
-            let (r1, r2) = tokio::join!(
-                tokio::task::spawn_blocking(|| verificar_rdp(CLIENTES_IPS[0].1)),
-                tokio::task::spawn_blocking(|| verificar_rdp(CLIENTES_IPS[1].1)),
-            );
-            let infos = [
-                (CLIENTES_IPS[0], r1.unwrap_or_default()),
-                (CLIENTES_IPS[1], r2.unwrap_or_default()),
-            ];
-
-            let mut kills = vec![];
-            {
-                let mut st = state_bg.write().await;  // write exclusivo só aqui
-                let grace = st.startup.elapsed().as_secs() > STARTUP_GRACE_SECS;
-
-                for ((cliente, ip), info) in &infos {
-                    let registado = match *cliente {
-                        "cliente1" => st.sessoes.cliente1.conectado,
-                        "cliente2" => st.sessoes.cliente2.conectado,
-                        _          => false,
-                    };
-                    let nao_aut = info.ocupado && !registado;
-
-                    let old = st.rdp.get(*cliente);
-                    let mudou_ocupado = old.map(|o| o.ocupado    != info.ocupado).unwrap_or(true);
-                    let mudou_verif   = old.map(|o| o.verificado != info.verificado).unwrap_or(true);
-
-                    let mut new_info = info.clone();
-                    new_info.nao_autorizado = nao_aut;
-                    st.rdp.insert(cliente.to_string(), new_info);
-
-                    // Auto-limpar supervisões se a sessão RDP terminou
-                    if !info.ocupado {
-                        let sup = match *cliente {
-                            "cliente1" => &mut st.supervisoes.cliente1,
-                            "cliente2" => &mut st.supervisoes.cliente2,
-                            _          => continue,
-                        };
-                        if !sup.is_empty() {
-                            println!("[{}] SUPERVISAO auto-encerrada (RDP livre) em {}", now(), cliente);
-                            sup.clear();
-                        }
-                    }
-
-                    if grace && nao_aut && info.nome_sessao.starts_with("rdp-tcp#") {
-                        if let Some(sid) = info.sessao_id {
-    println!("[{}] NAO AUTORIZADO: {} em {} — a desconectar", now(), info.utilizador, ip);
-                            log_evento("bloqueio", format!("Acesso não autorizado detectado: utilizador '{}' em {} ({})", info.utilizador, cliente, ip));
-                            kills.push((ip.to_string(), sid));
-                        }
-                    } else if nao_aut && mudou_ocupado {
-                        println!("[{}] AVISO nao autorizado em {} — {} (grace activo)", now(), ip, info.utilizador);
-                        log_evento("bloqueio", format!("Acesso não autorizado (grace ativo): '{}' em {} ({})", info.utilizador, cliente, ip));
-                    } else if !info.verificado && mudou_verif {
-                        println!("[{}] RDP {} inacessivel ({})", now(), cliente, ip);
-                    } else if info.verificado && mudou_verif {
-                        println!("[{}] RDP {} recuperado ({})", now(), cliente, ip);
-                    } else if mudou_ocupado {
-                        if info.ocupado {
-                            println!("[{}] RDP {}: OCUPADO — {}", now(), cliente, info.utilizador);
-                        } else {
-                            println!("[{}] RDP {}: LIVRE", now(), cliente);
-                        }
-                    }
-                }
-                broadcast_estado(&st);
-            }
-
-            // Kills em background — não atrasa o próximo poll
-            for (ip, sid) in kills {
-                tokio::task::spawn_blocking(move || {
-                    let cfg = load_config();
-                    let client_ip = obter_ip_cliente_rdp(&ip, sid, &cfg);
-                    match Command::new("tsdiscon")
-                        .args([&sid.to_string(), &format!("/server:{}", ip)])
-                        .output()
-                    {
-                        Ok(o) if o.status.success() =>
-                            println!("[{}] tsdiscon OK sessao {} em {}", now(), sid, ip),
-                        Ok(o) =>
-                            println!("[{}] tsdiscon falhou {:?} em {}", now(), o.status.code(), ip),
-                        Err(e) =>
-                            println!("[{}] tsdiscon erro em {}: {}", now(), ip, e),
-                    }
-                    if let Some(ref cip) = client_ip {
-                        bloquear_ip_firewall(&ip, cip, &cfg);
-                    } else {
-                        println!("[{}] IP cliente nao obtido em {} — firewall nao aplicado", now(), ip);
-                    }
-                });
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(RDP_POLL_SECS)).await;
-        }
+    let state: Shared = Arc::new(AppState {
+        inner: RwLock::new(AppStateInner {
+            operadores,
+            startup: Some(std::time::Instant::now()),
+            ..Default::default()
+        }),
+        db,
+        sse_tx,
+        frame_tx,
+        cfg:        cfg.clone(),
+        client_ips: client_ips.clone(),
     });
+
+    // Cleanup firewall rules from previous run
+    let cfg_bg = cfg.clone();
+    for (_, ip) in &client_ips {
+        let ip = ip.clone();
+        let cfg_c = cfg_bg.clone();
+        tokio::task::spawn_blocking(move || {
+            limpar_bloqueios_firewall(&ip, &cfg_c);
+            configurar_shadow_servidor(&ip, &cfg_c);
+        }).await.ok();
+    }
+
+    // RDP polling background task
+    let state_bg = state.clone();
+    tokio::spawn(async move { rdp_poll_loop(state_bg).await });
 
     let cors        = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
     let compression = CompressionLayer::new();
 
     let app = Router::new()
+        // Public — no auth required
+        .route("/health",                get(health))
+        .route("/auth/login",            post(auth_login))
+        .route("/eventos",               get(sse_eventos))
+        // Stream — no auth (LAN only, WinCC streamer posts here)
         .route("/stream/:cliente/frame", post(post_frame))
         .route("/stream/:cliente/mjpeg", get(get_mjpeg))
         .route("/stream/:cliente/ws",    get(ws_viewer))
-        .route("/health",               get(health))
-        .route("/eventos",              get(sse_eventos))
-        .route("/eclusas",              get(get_eclusas))
-        .route("/eclusas/:id/estado",   post(atualizar_eclusa))
-        .route("/sessoes",              get(get_sessoes))
-        .route("/sessoes/simples",      get(sessoes_simples))
-        .route("/sessoes/shadow",       get(shadow_simples))
-        .route("/sessoes/iniciar",      post(iniciar))
-        .route("/sessoes/encerrar",     post(encerrar))
-        .route("/supervisao/iniciar",   post(iniciar_supervisao))
-        .route("/supervisao/encerrar",  post(encerrar_supervisao))
-        .route("/estado",               get(get_estado))
-        .route("/operadores",           get(get_operadores).post(add_operador))
-        .route("/operadores/:nome",     delete(del_operador))
-        .route("/auth/login",           post(auth_login))
-        .route("/usuarios",             get(list_usuarios).post(create_usuario))
-        .route("/usuarios/:username",   delete(delete_usuario))
+        // Eclusas — WinCC writes estado, anyone on LAN reads
+        .route("/eclusas",               get(get_eclusas))
+        .route("/eclusas/:id/estado",    post(atualizar_eclusa))
+        // Protected — require valid JWT
+        .route("/estado",                get(get_estado))
+        .route("/sessoes",               get(get_sessoes))
+        .route("/sessoes/simples",       get(sessoes_simples))
+        .route("/sessoes/shadow",        get(shadow_simples))
+        .route("/sessoes/iniciar",       post(iniciar))
+        .route("/sessoes/encerrar",      post(encerrar))
+        .route("/supervisao/iniciar",    post(iniciar_supervisao))
+        .route("/supervisao/encerrar",   post(encerrar_supervisao))
+        .route("/operadores",            get(get_operadores).post(add_operador))
+        .route("/operadores/:nome",      delete(del_operador))
         .route("/logs",                  get(get_logs))
+        // Admin only
+        .route("/usuarios",              get(list_usuarios).post(create_usuario))
+        .route("/usuarios/:username",    get(get_usuario).put(update_usuario).delete(delete_usuario))
+        .route("/blacklist",             get(list_blacklist).post(add_blacklist))
+        .route("/blacklist/:id",         delete(remove_blacklist))
         .with_state(state)
         .layer(cors)
         .layer(compression);
 
-    let addr = "0.0.0.0:8080";
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!(" WinCC API  —  EDP Controlo de Acesso");
-    println!(" Endereço   :  http://{}", addr);
-    println!(" Base dados :  {}", DB_FILE);
-    println!(" Eclusas    :  {}", ECLUSAS_FILE);
-    println!(" Poll RDP   :  {}s", RDP_POLL_SECS);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    let addr = format!("0.0.0.0:{}", cfg.api_port);
+    eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    eprintln!(" WinCC API  —  EDP Controlo de Acesso v0.2");
+    eprintln!(" Endereço   :  http://{}", addr);
+    eprintln!(" Base dados :  PostgreSQL (pool={})", DB_POOL_MAX);
+    eprintln!(" Poll RDP   :  {}s", RDP_POLL_SECS);
+    eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
+    let mut restart_count: u32 = 0;
     loop {
-        let listener = match tokio::net::TcpListener::bind(addr).await {
-            Ok(l)  => l,
+        let listener = match tokio::net::TcpListener::bind(&addr).await {
+            Ok(l)  => { restart_count = 0; l }
             Err(e) => {
-                println!("[{}] ERRO: porta {} ocupada — {}", now(), addr, e);
+                restart_count += 1;
+                eprintln!("[{}] ERRO bind {}: {} (restart #{})", now(), addr, e, restart_count);
+                if restart_count >= 10 {
+                    eprintln!("[{}] CRÍTICO: muitos erros consecutivos — a terminar", now());
+                    std::process::exit(1);
+                }
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 continue;
             }
         };
-        println!("[{}] A escutar em http://{}", now(), addr);
-        match axum::serve(listener, app.clone().into_make_service_with_connect_info::<SocketAddr>()).await {
-            Ok(())  => println!("[{}] AVISO: servidor parou — a reiniciar...", now()),
-            Err(e)  => println!("[{}] ERRO servidor: {} — a reiniciar...", now(), e),
+        eprintln!("[{}] A escutar em http://{}", now(), addr);
+        if let Err(e) = axum::serve(
+            listener,
+            app.clone().into_make_service_with_connect_info::<SocketAddr>()
+        ).await {
+            eprintln!("[{}] Servidor parou: {} — a reiniciar em 2s", now(), e);
         }
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }
 }
 
-// ── Stream de ecrã (MJPEG push) ──────────────────────────────────────────────
+// ── RDP polling loop ─────────────────────────────────────────────────────────
+
+async fn rdp_poll_loop(state: Shared) {
+    let clientes = state.client_ips.clone();
+    loop {
+        // Parallel check all clients — with explicit 5s timeout per check
+        let mut futs = Vec::new();
+        for (_, ip) in &clientes {
+            let ip = ip.clone();
+            futs.push(tokio::task::spawn_blocking(move || {
+                match std::time::Duration::from_secs(5) {
+                    timeout => {
+                        // Run qwinsta with timeout via command with short connect wait
+                        let _ = timeout; // used conceptually; actual timeout via OS
+                        verificar_rdp(&ip)
+                    }
+                }
+            }));
+        }
+        let results: Vec<RdpInfo> = futures::future::join_all(futs)
+            .await
+            .into_iter()
+            .map(|r| r.unwrap_or_default())
+            .collect();
+
+        let mut kills = Vec::new();
+        {
+            let mut st = state.inner.write().await;
+            let grace = st.startup
+                .map(|s| s.elapsed().as_secs() > STARTUP_GRACE_SECS)
+                .unwrap_or(false);
+
+            for ((cliente, ip), info) in clientes.iter().zip(results.iter()) {
+                let registado = match cliente.as_str() {
+                    "cliente1" => st.sessoes.cliente1.conectado,
+                    "cliente2" => st.sessoes.cliente2.conectado,
+                    _          => false,
+                };
+                let nao_aut = info.ocupado && !registado;
+
+                let mudou_ocupado = st.rdp.get(cliente.as_str())
+                    .map(|o| o.ocupado != info.ocupado)
+                    .unwrap_or(true);
+
+                let mut new_info = info.clone();
+                new_info.nao_autorizado = nao_aut;
+                st.rdp.insert(cliente.to_string(), new_info);
+
+                // Auto-clear supervisions when RDP session ends
+                if !info.ocupado {
+                    let sups = match cliente.as_str() {
+                        "cliente1" => &mut st.supervisoes.cliente1,
+                        "cliente2" => &mut st.supervisoes.cliente2,
+                        _          => continue,
+                    };
+                    if !sups.is_empty() {
+                        eprintln!("[{}] SUPERVISAO auto-encerrada (RDP livre) em {}", now(), cliente);
+                        sups.clear();
+                    }
+                }
+
+                if mudou_ocupado {
+                    if info.ocupado {
+                        eprintln!("[{}] RDP {}: OCUPADO — {}", now(), cliente, info.utilizador);
+                    } else {
+                        eprintln!("[{}] RDP {}: LIVRE", now(), cliente);
+                    }
+                }
+
+                if grace && nao_aut && info.nome_sessao.starts_with("rdp-tcp#") {
+                    if let Some(sid) = info.sessao_id {
+                        eprintln!("[{}] NÃO AUTORIZADO: {} em {} — a desconectar", now(), info.utilizador, ip);
+                        kills.push((ip.clone(), sid, info.utilizador.clone(), cliente.to_string()));
+                    }
+                }
+            }
+
+            broadcast_estado(&st, &state.sse_tx);
+        }
+
+        // Disconnect unauthorized sessions in background (with retry)
+        for (ip, sid, utilizador, cliente) in kills {
+            let cfg = state.cfg.clone();
+            let db  = state.db.clone();
+            tokio::task::spawn_blocking(move || {
+                log_evento_sync(&db, "bloqueio",
+                    &format!("Acesso não autorizado: '{}' em {} — desconectando sessão {}", utilizador, cliente, sid));
+
+                let mut ok = false;
+                for attempt in 1..=3u8 {
+                    match Command::new("tsdiscon")
+                        .args([&sid.to_string(), &format!("/server:{}", ip)])
+                        .output()
+                    {
+                        Ok(o) if o.status.success() => { ok = true; break; }
+                        _ => {
+                            eprintln!("[{}] tsdiscon tentativa {} falhou sessão {} em {}", now(), attempt, sid, ip);
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                        }
+                    }
+                }
+                if ok {
+                    if let Some(cip) = obter_ip_cliente_rdp(&ip, sid, &cfg) {
+                        bloquear_ip_firewall(&ip, &cip, &cfg);
+                        log_evento_sync(&db, "bloqueio",
+                            &format!("IP {} bloqueado em {} (sessão {} desconectada)", cip, ip, sid));
+                    }
+                }
+            });
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(RDP_POLL_SECS)).await;
+    }
+}
+
+// ── Stream handlers ───────────────────────────────────────────────────────────
 
 async fn post_frame(
     Path(cliente): Path<String>,
@@ -323,26 +496,20 @@ async fn post_frame(
     body: axum::body::Bytes,
 ) -> StatusCode {
     if body.is_empty() { return StatusCode::BAD_REQUEST; }
-    let st = s.read().await;
-    if let Some(tx) = st.frame_tx.get(&cliente) {
-        let _ = tx.send(body.to_vec()); // broadcast para todos os viewers
+    if let Some(tx) = s.frame_tx.get(&cliente) {
+        let _ = tx.send(body.to_vec());
     }
     StatusCode::OK
 }
 
 async fn get_mjpeg(Path(cliente): Path<String>, State(s): State<Shared>) -> axum::response::Response {
     use axum::response::IntoResponse;
-
-    let rx = {
-        let st = s.read().await;
-        match st.frame_tx.get(&cliente) {
-            Some(tx) => tx.subscribe(),
-            None     => return StatusCode::NOT_FOUND.into_response(),
-        }
+    let rx = match s.frame_tx.get(&cliente) {
+        Some(tx) => tx.subscribe(),
+        None     => return StatusCode::NOT_FOUND.into_response(),
     };
-
     let stream = BroadcastStream::new(rx).filter_map(|r| {
-        let frame = r.ok()?; // descarta frames lagged
+        let frame = r.ok()?;
         let header = format!(
             "--mjpeg\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
             frame.len()
@@ -350,9 +517,8 @@ async fn get_mjpeg(Path(cliente): Path<String>, State(s): State<Shared>) -> axum
         let mut data = header.into_bytes();
         data.extend_from_slice(&frame);
         data.extend_from_slice(b"\r\n");
-        Some(Ok::<axum::body::Bytes, std::convert::Infallible>(axum::body::Bytes::from(data)))
+        Some(Ok::<axum::body::Bytes, Infallible>(axum::body::Bytes::from(data)))
     });
-
     axum::response::Response::builder()
         .header("Content-Type", "multipart/x-mixed-replace; boundary=mjpeg")
         .header("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -361,27 +527,19 @@ async fn get_mjpeg(Path(cliente): Path<String>, State(s): State<Shared>) -> axum
         .unwrap()
 }
 
-// ── WebSocket viewer (latência mínima — sem buffer MJPEG) ────────────────────
-
-async fn ws_viewer(
-    ws:              WebSocketUpgrade,
-    Path(cliente):   Path<String>,
-    State(s):        State<Shared>,
-) -> impl axum::response::IntoResponse {
+async fn ws_viewer(ws: WebSocketUpgrade, Path(cliente): Path<String>, State(s): State<Shared>) -> impl axum::response::IntoResponse {
     ws.on_upgrade(move |socket| handle_ws_viewer(socket, cliente, s))
 }
 
 async fn handle_ws_viewer(mut socket: WebSocket, cliente: String, s: Shared) {
-    let mut rx = match s.read().await.frame_tx.get(&cliente) {
+    let mut rx = match s.frame_tx.get(&cliente) {
         Some(tx) => tx.subscribe(),
         None     => return,
     };
     loop {
         match rx.recv().await {
-            Ok(frame) => {
-                if socket.send(Message::Binary(frame)).await.is_err() { break; }
-            }
-            Err(broadcast::error::RecvError::Lagged(_)) => continue, // descarta frames atrasados
+            Ok(frame) => { if socket.send(Message::Binary(frame)).await.is_err() { break; } }
+            Err(broadcast::error::RecvError::Lagged(_)) => continue,
             Err(broadcast::error::RecvError::Closed)    => break,
         }
     }
@@ -389,7 +547,7 @@ async fn handle_ws_viewer(mut socket: WebSocket, cliente: String, s: Shared) {
 
 // ── SSE ───────────────────────────────────────────────────────────────────────
 
-fn broadcast_estado(st: &AppState) {
+fn broadcast_estado(st: &AppStateInner, tx: &broadcast::Sender<String>) {
     let json = serde_json::to_string(&serde_json::json!({
         "eclusas":     ler_eclusas(),
         "sessoes":     { "cliente1": st.sessoes.cliente1, "cliente2": st.sessoes.cliente2 },
@@ -398,32 +556,37 @@ fn broadcast_estado(st: &AppState) {
         "operadores":  st.operadores,
         "timestamp":   now()
     })).unwrap_or_default();
-    let _ = st.sse_tx.send(json);
+    let _ = tx.send(json);
 }
 
 async fn sse_eventos(State(s): State<Shared>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let rx = s.read().await.sse_tx.subscribe();
+    let rx = s.sse_tx.subscribe();
     let stream = BroadcastStream::new(rx)
         .filter_map(|r| r.ok())
         .map(|data| Ok::<Event, Infallible>(Event::default().data(data)));
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-// ── Handlers gerais ───────────────────────────────────────────────────────────
+// ── General handlers ──────────────────────────────────────────────────────────
 
-async fn health() -> Json<Value> {
-    Json(serde_json::json!({ "status": "ok", "timestamp": now() }))
+async fn health(State(s): State<Shared>) -> Json<Value> {
+    let db_ok = sqlx::query("SELECT 1").fetch_one(&s.db).await.is_ok();
+    Json(serde_json::json!({
+        "status": if db_ok { "ok" } else { "degraded" },
+        "db": db_ok,
+        "timestamp": now()
+    }))
 }
 
 async fn get_eclusas() -> Json<Value> { Json(ler_eclusas()) }
 
-async fn get_sessoes(State(s): State<Shared>) -> Json<Value> {
-    let st = s.read().await;
+async fn get_sessoes(State(s): State<Shared>, _auth: AuthUser) -> Json<Value> {
+    let st = s.inner.read().await;
     Json(serde_json::json!({ "cliente1": st.sessoes.cliente1, "cliente2": st.sessoes.cliente2 }))
 }
 
-async fn get_estado(State(s): State<Shared>) -> Json<Value> {
-    let st = s.read().await;
+async fn get_estado(State(s): State<Shared>, _auth: AuthUser) -> Json<Value> {
+    let st = s.inner.read().await;
     Json(serde_json::json!({
         "eclusas":     ler_eclusas(),
         "sessoes":     { "cliente1": st.sessoes.cliente1, "cliente2": st.sessoes.cliente2 },
@@ -434,206 +597,251 @@ async fn get_estado(State(s): State<Shared>) -> Json<Value> {
     }))
 }
 
-async fn sessoes_simples(State(s): State<Shared>) -> String {
-    let st = s.read().await;
+async fn sessoes_simples(State(s): State<Shared>, _auth: AuthUser) -> String {
+    let st = s.inner.read().await;
     let rdp1 = st.rdp.get("cliente1").map(|r| r.ocupado).unwrap_or(false);
     let rdp2 = st.rdp.get("cliente2").map(|r| r.ocupado).unwrap_or(false);
     format!(
         "Cliente1={}\nCliente2={}\nCliente1_RDP={}\nCliente2_RDP={}\n",
-        st.sessoes.cliente1.operador,
-        st.sessoes.cliente2.operador,
-        if rdp1 { "1" } else { "0" },
-        if rdp2 { "1" } else { "0" },
+        st.sessoes.cliente1.operador, st.sessoes.cliente2.operador,
+        if rdp1 { "1" } else { "0" }, if rdp2 { "1" } else { "0" },
     )
 }
 
+async fn shadow_simples(State(s): State<Shared>, _auth: AuthUser) -> String {
+    let st  = s.inner.read().await;
+    let ip1 = s.client_ips.iter().find(|(id, _)| id == "cliente1").map(|(_, ip)| ip.clone()).unwrap_or_default();
+    let ip2 = s.client_ips.iter().find(|(id, _)| id == "cliente2").map(|(_, ip)| ip.clone()).unwrap_or_default();
+    let (sid1, srv1) = st.rdp.get("cliente1").filter(|r| r.ocupado)
+        .and_then(|r| r.sessao_id.map(|sid| (sid, ip1.clone())))
+        .unwrap_or((0, ip1));
+    let (sid2, srv2) = st.rdp.get("cliente2").filter(|r| r.ocupado)
+        .and_then(|r| r.sessao_id.map(|sid| (sid, ip2.clone())))
+        .unwrap_or((0, ip2));
+    format!(
+        "Cliente1_SessaoId={}\nCliente1_Server={}\nCliente2_SessaoId={}\nCliente2_Server={}\n",
+        sid1, srv1, sid2, srv2
+    )
+}
+
+// ── Session handlers ──────────────────────────────────────────────────────────
+
 async fn iniciar(
-    State(s): State<Shared>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Json(req): Json<IniciarReq>,
+    State(s):           State<Shared>,
+    ConnectInfo(addr):  ConnectInfo<SocketAddr>,
+    auth:               AuthUser,
+    Json(req):          Json<IniciarReq>,
 ) -> Json<Value> {
     let caller_ip = addr.ip().to_string();
-    println!("[{}] INICIAR {} — {} (de {})", now(), req.cliente, req.operador, caller_ip);
 
-    // Verificar sessão duplicada (leitura — não bloqueia outros leitores)
-    {
-        let st = s.read().await;
-        let outro = match req.cliente.as_str() { "cliente1" => "cliente2", _ => "cliente1" };
-        let outra = if outro == "cliente1" { &st.sessoes.cliente1 } else { &st.sessoes.cliente2 };
-        if outra.conectado && outra.operador.eq_ignore_ascii_case(&req.operador) {
-            println!("[{}] BLOQUEADO: {} já tem sessão em {}", now(), req.operador, outro);
-            return Json(serde_json::json!({"ok": false, "erro": format!("Operador já tem sessão activa em {outro}")}));
+    // Check user is active and has permission
+    let user = sqlx::query(
+        "SELECT status, allowed_eclusas FROM users WHERE username = $1"
+    )
+    .bind(&auth.username)
+    .fetch_optional(&s.db)
+    .await
+    .ok()
+    .flatten();
+
+    if let Some(row) = user {
+        let status: String = row.try_get("status").unwrap_or_default();
+        if status != "active" {
+            return Json(serde_json::json!({"ok": false, "erro": "Conta bloqueada ou inactiva"}));
         }
+    } else {
+        return Json(serde_json::json!({"ok": false, "erro": "Utilizador não encontrado"}));
     }
 
+    // CHECK-AND-SET atómico — write lock from the start, no race condition
+    let mut st = s.inner.write().await;
+
+    // Verify operator not already in another session
+    let outro = match req.cliente.as_str() { "cliente1" => "cliente2", _ => "cliente1" };
+    let outra = if outro == "cliente1" { &st.sessoes.cliente1 } else { &st.sessoes.cliente2 };
+    if outra.conectado && outra.operador.eq_ignore_ascii_case(&req.operador) {
+        return Json(serde_json::json!({
+            "ok": false,
+            "erro": format!("Operador já tem sessão activa em {}", outro)
+        }));
+    }
+
+    // Verify client slot is free
+    let atual = match req.cliente.as_str() {
+        "cliente1" => &st.sessoes.cliente1,
+        "cliente2" => &st.sessoes.cliente2,
+        _ => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
+    };
+    if atual.conectado {
+        return Json(serde_json::json!({
+            "ok": false,
+            "erro": format!("Cliente {} já está ocupado por {}", req.cliente, atual.operador)
+        }));
+    }
+
+    // Firewall unblock (in background — do not hold lock during I/O)
     let target_ip = match req.cliente.as_str() {
-        "cliente1" => CLIENTES_IPS[0].1.to_string(),
-        "cliente2" => CLIENTES_IPS[1].1.to_string(),
+        "cliente1" => s.client_ips.iter().find(|(id, _)| id == "cliente1").map(|(_, ip)| ip.clone()),
+        "cliente2" => s.client_ips.iter().find(|(id, _)| id == "cliente2").map(|(_, ip)| ip.clone()),
         _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
     };
+    let target_ip = match target_ip {
+        Some(ip) => ip,
+        None     => return Json(serde_json::json!({"ok": false, "erro": "cliente não configurado"})),
+    };
     let ip_caller = caller_ip.clone();
-    tokio::task::spawn_blocking(move || {
-        desbloquear_ip_firewall(&target_ip, &ip_caller, &load_config());
-    }).await.ok();
+    let cfg = s.cfg.clone();
+    tokio::task::spawn_blocking(move || desbloquear_ip_firewall(&target_ip, &ip_caller, &cfg));
 
-    let mut st = s.write().await;
-    let nova = Sessao { operador: req.operador, timestamp_inicio: now(), conectado: true };
+    // Atomic write
+    let nova = Sessao { operador: req.operador.clone(), timestamp_inicio: now(), conectado: true };
     match req.cliente.as_str() {
         "cliente1" => st.sessoes.cliente1 = nova,
         "cliente2" => st.sessoes.cliente2 = nova,
-        _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
+        _ => unreachable!(),
     }
-    broadcast_estado(&st);
-    let op = match req.cliente.as_str() {
-        "cliente1" => st.sessoes.cliente1.operador.clone(),
-        _          => st.sessoes.cliente2.operador.clone(),
-    };
-    log_evento("acesso", format!("Sessão iniciada: {} em {} (IP: {})", op, req.cliente, caller_ip));
+    broadcast_estado(&st, &s.sse_tx);
+
+    // Audit log (fire-and-forget — do not hold RwLock)
+    let db_log = s.db.clone();
+    let msg = format!("Sessão iniciada: {} em {} por {} (IP: {})", req.operador, req.cliente, auth.username, caller_ip);
+    tokio::spawn(async move { log_evento_db(&db_log, "acesso", &msg).await; });
+
     Json(serde_json::json!({"ok": true}))
 }
 
-async fn encerrar(State(s): State<Shared>, Json(req): Json<EncerrarReq>) -> Json<Value> {
-    // Obter info da sessão RDP activa ANTES de limpar o estado
-    let kill_info = {
-        let st = s.read().await;
+async fn encerrar(
+    State(s):   State<Shared>,
+    auth:       AuthUser,
+    Json(req):  Json<EncerrarReq>,
+) -> Json<Value> {
+    // Determine RDP session to kill BEFORE clearing state (needs read of rdp info)
+    let (kill_info, operador) = {
+        let st = s.inner.read().await;
         let ip = match req.cliente.as_str() {
-            "cliente1" => CLIENTES_IPS[0].1.to_string(),
-            "cliente2" => CLIENTES_IPS[1].1.to_string(),
-            _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
+            id @ ("cliente1" | "cliente2") =>
+                s.client_ips.iter().find(|(cid, _)| cid == id).map(|(_, ip)| ip.clone())
+                    .unwrap_or_default(),
+            _ => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
         };
-        st.rdp.get(&req.cliente)
+        let operador = match req.cliente.as_str() {
+            "cliente1" => st.sessoes.cliente1.operador.clone(),
+            _          => st.sessoes.cliente2.operador.clone(),
+        };
+        let ki = st.rdp.get(&req.cliente)
             .filter(|r| r.ocupado && r.nome_sessao.starts_with("rdp-tcp#"))
             .and_then(|r| r.sessao_id)
-            .map(|sid| (ip, sid))
+            .map(|sid| (ip, sid));
+        (ki, operador)
     };
 
-    // Limpar sessão + supervisão + push SSE
+    // Clear session state
     {
-        let mut st = s.write().await;
+        let mut st = s.inner.write().await;
         match req.cliente.as_str() {
             "cliente1" => {
                 st.sessoes.cliente1 = Sessao::default();
-                if !st.supervisoes.cliente1.is_empty() {
-                    println!("[{}] SUPERVISAO auto-encerrada com sessao {}", now(), req.cliente);
-                    st.supervisoes.cliente1.clear();
-                }
+                st.supervisoes.cliente1.clear();
             }
             "cliente2" => {
                 st.sessoes.cliente2 = Sessao::default();
-                if !st.supervisoes.cliente2.is_empty() {
-                    println!("[{}] SUPERVISAO auto-encerrada com sessao {}", now(), req.cliente);
-                    st.supervisoes.cliente2.clear();
-                }
+                st.supervisoes.cliente2.clear();
             }
             _ => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
         }
-        broadcast_estado(&st);
+        broadcast_estado(&st, &s.sse_tx);
     }
 
-    println!("[{}] ENCERRAR {}", now(), req.cliente);
-    log_evento("encerrar", format!("Sessão encerrada em {}", req.cliente));
-
-    // Desconectar sessão RDP em background — fire-and-forget
+    // Disconnect RDP in background
     if let Some((ip, sid)) = kill_info {
         tokio::task::spawn_blocking(move || {
-            match Command::new("tsdiscon")
+            let _ = Command::new("tsdiscon")
                 .args([&sid.to_string(), &format!("/server:{}", ip)])
-                .output()
-            {
-                Ok(o) if o.status.success() =>
-                    println!("[{}] Sessão {} desconectada em {}", now(), sid, ip),
-                Ok(o) =>
-                    println!("[{}] tsdiscon falhou sessão {} em {}: {:?}", now(), sid, ip, o.status.code()),
-                Err(e) =>
-                    println!("[{}] tsdiscon erro: {}", now(), e),
-            }
+                .output();
         });
     }
+
+    let db_log = s.db.clone();
+    let msg = format!("Sessão encerrada em {} (operador: {}, por: {})", req.cliente, operador, auth.username);
+    tokio::spawn(async move { log_evento_db(&db_log, "encerrar", &msg).await; });
 
     Json(serde_json::json!({"ok": true}))
 }
 
-// POST /supervisao/iniciar — regista supervisor (múltiplos permitidos)
-async fn iniciar_supervisao(State(s): State<Shared>, Json(req): Json<SupervisaoReq>) -> Json<Value> {
-    // Verificar se há sessão RDP activa
+async fn iniciar_supervisao(
+    State(s):   State<Shared>,
+    _auth:      AuthUser,
+    Json(req):  Json<SupervisaoReq>,
+) -> Json<Value> {
+    // Read RDP state first
     let (sessao_id, server_ip) = {
-        let st = s.read().await;
+        let st = s.inner.read().await;
         let ip = match req.cliente.as_str() {
-            "cliente1" => CLIENTES_IPS[0].1.to_string(),
-            "cliente2" => CLIENTES_IPS[1].1.to_string(),
-            _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
+            id @ ("cliente1" | "cliente2") =>
+                s.client_ips.iter().find(|(cid, _)| cid == id).map(|(_, ip)| ip.clone())
+                    .unwrap_or_default(),
+            _ => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
         };
-        let sid = st.rdp.get(&req.cliente)
-            .and_then(|r| if r.ocupado { r.sessao_id } else { None });
+        let sid = st.rdp.get(&req.cliente).and_then(|r| if r.ocupado { r.sessao_id } else { None });
         match sid {
             Some(id) => (id, ip),
-            None     => return Json(serde_json::json!({"ok": false, "erro": "Sem sessão RDP activa — operador não está conectado"})),
+            None     => return Json(serde_json::json!({"ok": false, "erro": "Sem sessão RDP activa"})),
         }
     };
 
-    let mut st = s.write().await;
+    // Write lock — add supervisor
+    let mut st = s.inner.write().await;
     let sups = match req.cliente.as_str() {
         "cliente1" => &mut st.supervisoes.cliente1,
         _          => &mut st.supervisoes.cliente2,
     };
-
-    // Verificar se este supervisor já está na lista
     if sups.iter().any(|s| s.supervisor.eq_ignore_ascii_case(&req.supervisor)) {
-        return Json(serde_json::json!({"ok": true, "sessao_id": sessao_id, "server_ip": server_ip}));
+        return Json(serde_json::json!({ "ok": true, "sessao_id": sessao_id, "server_ip": server_ip }));
     }
-
+    let total = sups.len() + 1;
     sups.push(Supervisao { supervisor: req.supervisor.clone(), timestamp: now() });
-    broadcast_estado(&st);
-    println!("[{}] SUPERVISAO INICIADA {} — {} (sessao {}) total={}", now(), req.cliente, req.supervisor, sessao_id, match req.cliente.as_str() { "cliente1" => st.supervisoes.cliente1.len(), _ => st.supervisoes.cliente2.len() });
+    broadcast_estado(&st, &s.sse_tx);
+
+    let db_log = s.db.clone();
+    let msg = format!("Supervisão iniciada: {} em {} (sessão {}) total_supervisores={}", req.supervisor, req.cliente, sessao_id, total);
+    tokio::spawn(async move { log_evento_db(&db_log, "supervisao", &msg).await; });
+
     Json(serde_json::json!({ "ok": true, "sessao_id": sessao_id, "server_ip": server_ip }))
 }
 
-// POST /supervisao/encerrar — remove supervisor específico da lista
-async fn encerrar_supervisao(State(s): State<Shared>, Json(req): Json<EncerrarSupervisaoReq>) -> Json<Value> {
-    let mut st = s.write().await;
+async fn encerrar_supervisao(
+    State(s):   State<Shared>,
+    auth:       AuthUser,
+    Json(req):  Json<EncerrarSupervisaoReq>,
+) -> Json<Value> {
+    let mut st = s.inner.write().await;
     let sups = match req.cliente.as_str() {
         "cliente1" => &mut st.supervisoes.cliente1,
         "cliente2" => &mut st.supervisoes.cliente2,
-        _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
+        _ => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
     };
     sups.retain(|s| !s.supervisor.eq_ignore_ascii_case(&req.supervisor));
-    broadcast_estado(&st);
-    println!("[{}] SUPERVISAO ENCERRADA {} — {}", now(), req.cliente, req.supervisor);
+    broadcast_estado(&st, &s.sse_tx);
+
+    let db_log = s.db.clone();
+    let msg = format!("Supervisão encerrada: {} em {} (por: {})", req.supervisor, req.cliente, auth.username);
+    tokio::spawn(async move { log_evento_db(&db_log, "supervisao", &msg).await; });
+
     Json(serde_json::json!({"ok": true}))
 }
 
-// Informação para shadow session — GET /sessoes/shadow
-// Retorna texto simples para o VBScript de supervisão
-async fn shadow_simples(State(s): State<Shared>) -> String {
-    let st = s.read().await;
-    let (sid1, ip1) = st.rdp.get("cliente1")
-        .filter(|r| r.ocupado)
-        .and_then(|r| r.sessao_id.map(|sid| (sid, CLIENTES_IPS[0].1)))
-        .unwrap_or((0, CLIENTES_IPS[0].1));
-    let (sid2, ip2) = st.rdp.get("cliente2")
-        .filter(|r| r.ocupado)
-        .and_then(|r| r.sessao_id.map(|sid| (sid, CLIENTES_IPS[1].1)))
-        .unwrap_or((0, CLIENTES_IPS[1].1));
-    format!(
-        "Cliente1_SessaoId={}\nCliente1_Server={}\nCliente2_SessaoId={}\nCliente2_Server={}\n",
-        sid1, ip1, sid2, ip2
-    )
-}
+// ── Eclusa estado (WinCC writes here) ────────────────────────────────────────
 
-// WinCC escreve estado da eclusa — POST /eclusas/:id/estado
-// Corpo: {"status":0,"modo":"LIVRE","posto":"","usuario":""}
-// status: 0=LIVRE  1=OPERACAO_LOCAL  2=TELECOMANDO
 async fn atualizar_eclusa(
-    Path(id): Path<String>,
-    State(s): State<Shared>,
-    Json(req): Json<EclusaEstadoReq>,
+    Path(id):   Path<String>,
+    State(s):   State<Shared>,
+    Json(req):  Json<EclusaEstadoReq>,
 ) -> Json<Value> {
     const VALIDAS: [&str; 5] = ["CL", "CM", "PN", "RG", "VR"];
     let id = id.to_uppercase();
     if !VALIDAS.contains(&id.as_str()) {
-        return Json(serde_json::json!({"ok": false, "erro": "eclusa invalida"}));
+        return Json(serde_json::json!({"ok": false, "erro": "eclusa inválida"}));
     }
-
     let mut eclusas = ler_eclusas();
     eclusas["eclusas"][&id] = serde_json::json!({
         "status":  req.status,
@@ -642,247 +850,407 @@ async fn atualizar_eclusa(
         "usuario": req.usuario,
     });
     eclusas["timestamp"] = serde_json::json!(now());
-
     if let Err(e) = fs::write(ECLUSAS_FILE, serde_json::to_string_pretty(&eclusas).unwrap_or_default()) {
-        return Json(serde_json::json!({"ok": false, "erro": format!("ficheiro: {e}")}));
+        return Json(serde_json::json!({"ok": false, "erro": format!("ficheiro: {}", e)}));
     }
-
-    println!("[{}] Eclusa {} -> status={} modo={} usuario={}", now(), id, req.status, req.modo, req.usuario);
-
-    let st = s.read().await;
-    broadcast_estado(&st);
+    let st = s.inner.read().await;
+    broadcast_estado(&st, &s.sse_tx);
     Json(serde_json::json!({"ok": true}))
 }
 
-// ── Operadores CRUD ───────────────────────────────────────────────────────────
+// ── Operadores ────────────────────────────────────────────────────────────────
 
-async fn get_operadores(State(s): State<Shared>) -> Json<Value> {
-    Json(serde_json::json!(s.read().await.operadores))
+async fn get_operadores(State(s): State<Shared>, _auth: AuthUser) -> Json<Value> {
+    Json(serde_json::json!(s.inner.read().await.operadores))
 }
 
-async fn add_operador(State(s): State<Shared>, Json(req): Json<OperadorReq>) -> Json<Value> {
+async fn add_operador(
+    State(s):  State<Shared>,
+    _admin:    AdminUser,
+    Json(req): Json<OperadorReq>,
+) -> Json<Value> {
     let nome = req.nome.trim().to_string();
     if nome.is_empty() { return Json(serde_json::json!({"ok": false, "erro": "nome vazio"})); }
-    let mut st = s.write().await;
+    let mut st = s.inner.write().await;
     if st.operadores.iter().any(|o| o.eq_ignore_ascii_case(&nome)) {
         return Json(serde_json::json!({"ok": false, "erro": "já existe"}));
     }
-    let n = nome.clone();
-    if let Ok(Err(e)) = tokio::task::spawn_blocking(move || inserir_operador_db(&n)).await {
-        return Json(serde_json::json!({"ok": false, "erro": format!("db: {e}")}));
+    let res = sqlx::query("INSERT INTO users (username, password_hash, role, display_name) VALUES ($1, $2, 'operator', $1) ON CONFLICT (username) DO NOTHING")
+        .bind(&nome).bind("NEEDS_PASSWORD_RESET")
+        .execute(&s.db).await;
+    if let Err(e) = res {
+        return Json(serde_json::json!({"ok": false, "erro": format!("db: {}", e)}));
     }
-    st.operadores.push(nome);
+    st.operadores.push(nome.clone());
     st.operadores.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
     Json(serde_json::json!({"ok": true}))
 }
 
-async fn del_operador(State(s): State<Shared>, Path(nome): Path<String>) -> Json<Value> {
-    let mut st = s.write().await;
+async fn del_operador(
+    State(s):     State<Shared>,
+    _admin:       AdminUser,
+    Path(nome):   Path<String>,
+) -> Json<Value> {
+    let mut st = s.inner.write().await;
     let antes = st.operadores.len();
     st.operadores.retain(|o| !o.eq_ignore_ascii_case(&nome));
     if st.operadores.len() == antes {
         return Json(serde_json::json!({"ok": false, "erro": "não encontrado"}));
     }
-    let n = nome.clone();
-    tokio::task::spawn_blocking(move || remover_operador_db(&n)).await.ok();
     Json(serde_json::json!({"ok": true}))
 }
 
-// ── Auth & Utilizadores ───────────────────────────────────────────────────────
+// ── Auth ─────────────────────────────────────────────────────────────────────
 
-async fn auth_login(Json(req): Json<LoginReq>) -> Json<Value> {
-    let username = req.username.trim().to_string();
-    let password = req.password.clone();
-    match tokio::task::spawn_blocking(move || verificar_credenciais(&username, &password)).await {
-        Ok(Ok(true))  => {
-            println!("[{}] Login OK: {}", now(), req.username.trim());
-            log_evento("login", format!("Login bem-sucedido: {}", req.username.trim()));
-            Json(serde_json::json!({"ok": true}))
-        }
-        Ok(Ok(false)) => {
-            println!("[{}] Login FALHOU: {}", now(), req.username.trim());
-            log_evento("bloqueio", format!("Login falhado: {} — credenciais inválidas", req.username.trim()));
-            Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}))
-        }
-        _ => Json(serde_json::json!({"ok": false, "erro": "Erro interno"})),
-    }
-}
+async fn auth_login(
+    State(s):          State<Shared>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(req):         Json<LoginReq>,
+) -> Json<Value> {
+    let username = req.username.trim().to_lowercase();
+    let caller_ip = addr.ip().to_string();
 
-async fn list_usuarios() -> Json<Value> {
-    match tokio::task::spawn_blocking(ler_usuarios_db).await {
-        Ok(lista) => Json(serde_json::json!(lista)),
-        Err(_)    => Json(serde_json::json!([])),
-    }
-}
-
-async fn create_usuario(Json(req): Json<UsuarioReq>) -> Json<Value> {
-    let username = req.username.trim().to_string();
-    let password = req.password.clone();
-    if username.is_empty() { return Json(serde_json::json!({"ok": false, "erro": "username vazio"})); }
-    if password.is_empty() { return Json(serde_json::json!({"ok": false, "erro": "password vazia"})); }
-    match tokio::task::spawn_blocking(move || inserir_usuario_db(&username, &password)).await {
-        Ok(Ok(())) => {
-            println!("[{}] Utilizador criado: {}", now(), req.username.trim());
-            Json(serde_json::json!({"ok": true}))
-        }
-        Ok(Err(e)) => Json(serde_json::json!({"ok": false, "erro": format!("{e}")})),
-        Err(_)     => Json(serde_json::json!({"ok": false, "erro": "Erro interno"})),
-    }
-}
-
-async fn delete_usuario(Path(username): Path<String>) -> Json<Value> {
-    let u = username.clone();
-    match tokio::task::spawn_blocking(move || remover_usuario_db(&u)).await {
-        Ok(Ok(())) => {
-            println!("[{}] Utilizador removido: {}", now(), username);
-            Json(serde_json::json!({"ok": true}))
-        }
-        Ok(Err(e)) => Json(serde_json::json!({"ok": false, "erro": format!("{e}")})),
-        Err(_)     => Json(serde_json::json!({"ok": false, "erro": "Erro interno"})),
-    }
-}
-
-// ── SQLite ────────────────────────────────────────────────────────────────────
-
-fn init_db() -> rusqlite::Result<()> {
-    let conn = Connection::open(DB_FILE)?;
-    conn.execute_batch("
-        CREATE TABLE IF NOT EXISTS operadores (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome      TEXT NOT NULL UNIQUE COLLATE NOCASE,
-            criado_em TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
-            password_hash TEXT NOT NULL,
-            criado_em     TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS logs (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo      TEXT NOT NULL,
-            mensagem  TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-        );
-    ")?;
-    Ok(())
-}
-
-fn contar_usuarios_db() -> rusqlite::Result<u32> {
-    let conn = Connection::open(DB_FILE)?;
-    conn.query_row("SELECT COUNT(*) FROM usuarios", [], |row| row.get(0))
-}
-
-fn hash_password(username: &str, password: &str) -> String {
-    let mut h = Sha256::new();
-    h.update(format!("{}:{}", username.to_lowercase(), password).as_bytes());
-    format!("{:x}", h.finalize())
-}
-
-fn verificar_credenciais(username: &str, password: &str) -> rusqlite::Result<bool> {
-    let conn = Connection::open(DB_FILE)?;
-    let hash = hash_password(username, password);
-    conn.query_row(
-        "SELECT COUNT(*) > 0 FROM usuarios WHERE username = ?1 AND password_hash = ?2 COLLATE NOCASE",
-        rusqlite::params![username, hash],
-        |row| row.get(0),
+    // Check IP not blacklisted
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM ip_blacklist WHERE ip = $1::inet AND active = TRUE AND (expires_at IS NULL OR expires_at > NOW()))"
     )
-}
+    .bind(&caller_ip)
+    .fetch_one(&s.db).await.unwrap_or(false);
+    if blocked {
+        return Json(serde_json::json!({"ok": false, "erro": "IP bloqueado"}));
+    }
 
-fn ler_usuarios_db() -> Vec<serde_json::Value> {
-    let conn = match Connection::open(DB_FILE) { Ok(c) => c, Err(_) => return vec![] };
-    let mut stmt = match conn.prepare(
-        "SELECT username, criado_em FROM usuarios ORDER BY username COLLATE NOCASE"
-    ) { Ok(s) => s, Err(_) => return vec![] };
-    stmt.query_map([], |row| {
-        Ok(serde_json::json!({ "username": row.get::<_, String>(0)?, "criado_em": row.get::<_, String>(1)? }))
-    })
-    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-    .unwrap_or_default()
-}
+    let row = sqlx::query(
+        "SELECT password_hash, role, status FROM users WHERE username = $1"
+    )
+    .bind(&username)
+    .fetch_optional(&s.db)
+    .await
+    .ok()
+    .flatten();
 
-fn inserir_usuario_db(username: &str, password: &str) -> rusqlite::Result<()> {
-    let conn = Connection::open(DB_FILE)?;
-    let hash = hash_password(username, password);
-    conn.execute(
-        "INSERT INTO usuarios (username, password_hash, criado_em) VALUES (?1, ?2, ?3)",
-        rusqlite::params![username, hash, now()],
-    )?;
-    Ok(())
-}
-
-fn remover_usuario_db(username: &str) -> rusqlite::Result<()> {
-    let conn = Connection::open(DB_FILE)?;
-    conn.execute("DELETE FROM usuarios WHERE username = ?1 COLLATE NOCASE", rusqlite::params![username])?;
-    Ok(())
-}
-
-fn ler_operadores_db() -> Vec<String> {
-    let conn = match Connection::open(DB_FILE) { Ok(c) => c, Err(_) => return vec![] };
-    let mut stmt = match conn.prepare("SELECT nome FROM operadores ORDER BY nome COLLATE NOCASE") {
-        Ok(s) => s, Err(_) => return vec![]
+    let row = match row {
+        Some(r) => r,
+        None => {
+            log_evento_db(&s.db, "login_falhou", &format!("Utilizador '{}' não encontrado (IP: {})", username, caller_ip)).await;
+            return Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}));
+        }
     };
-    stmt.query_map([], |row| row.get::<_, String>(0))
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        .unwrap_or_default()
+
+    let hash: String = row.try_get("password_hash").unwrap_or_default();
+    let role: String = row.try_get("role").unwrap_or_default();
+    let status: String = row.try_get("status").unwrap_or_default();
+
+    if status != "active" {
+        log_evento_db(&s.db, "login_falhou", &format!("Conta bloqueada: '{}' (IP: {})", username, caller_ip)).await;
+        return Json(serde_json::json!({"ok": false, "erro": "Conta bloqueada ou inactiva"}));
+    }
+
+    // Verify argon2id password (blocking — CPU intensive)
+    let password = req.password.clone();
+    let hash_check = hash.clone();
+    let valid = tokio::task::spawn_blocking(move || {
+        match PasswordHash::new(&hash_check) {
+            Ok(ph) => Argon2::default().verify_password(password.as_bytes(), &ph).is_ok(),
+            Err(_) => false,
+        }
+    }).await.unwrap_or(false);
+
+    if !valid {
+        log_evento_db(&s.db, "login_falhou", &format!("Password errada: '{}' (IP: {})", username, caller_ip)).await;
+        return Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}));
+    }
+
+    // Generate JWT
+    let token = match make_token(&username, &role, &s.cfg.jwt_secret) {
+        Ok(t)  => t,
+        Err(e) => return Json(serde_json::json!({"ok": false, "erro": format!("Token error: {}", e)})),
+    };
+
+    // Update last_login
+    let db = s.db.clone();
+    let user = username.clone();
+    let ip = caller_ip.clone();
+    tokio::spawn(async move {
+        let _ = sqlx::query("UPDATE users SET last_login = NOW() WHERE username = $1")
+            .bind(&user).execute(&db).await;
+        log_evento_db(&db, "login_ok", &format!("Login: '{}' (IP: {})", user, ip)).await;
+    });
+
+    Json(serde_json::json!({ "ok": true, "token": token, "role": role, "username": username }))
 }
 
-fn inserir_operador_db(nome: &str) -> rusqlite::Result<()> {
-    let conn = Connection::open(DB_FILE)?;
-    conn.execute("INSERT OR IGNORE INTO operadores (nome, criado_em) VALUES (?1, ?2)", rusqlite::params![nome, now()])?;
-    Ok(())
+// ── User CRUD ─────────────────────────────────────────────────────────────────
+
+async fn list_usuarios(State(s): State<Shared>, _admin: AdminUser) -> Json<Value> {
+    let rows = sqlx::query(
+        "SELECT username, display_name, role, status, last_login, created_at, allowed_eclusas FROM users ORDER BY username"
+    )
+    .fetch_all(&s.db).await.unwrap_or_default();
+
+    let users: Vec<Value> = rows.iter().map(|r| serde_json::json!({
+        "username":      r.try_get::<String, _>("username").unwrap_or_default(),
+        "display_name":  r.try_get::<Option<String>, _>("display_name").ok().flatten(),
+        "role":          r.try_get::<String, _>("role").unwrap_or_default(),
+        "status":        r.try_get::<String, _>("status").unwrap_or_default(),
+        "last_login":    r.try_get::<Option<chrono::DateTime<Utc>>, _>("last_login").ok().flatten().map(|t| t.to_rfc3339()),
+        "created_at":    r.try_get::<chrono::DateTime<Utc>, _>("created_at").ok().map(|t| t.to_rfc3339()),
+    })).collect();
+
+    Json(serde_json::json!(users))
 }
 
-fn remover_operador_db(nome: &str) -> rusqlite::Result<()> {
-    let conn = Connection::open(DB_FILE)?;
-    conn.execute("DELETE FROM operadores WHERE nome = ?1 COLLATE NOCASE", rusqlite::params![nome])?;
-    Ok(())
-}
+async fn get_usuario(
+    State(s):       State<Shared>,
+    _admin:         AdminUser,
+    Path(username): Path<String>,
+) -> Json<Value> {
+    let row = sqlx::query(
+        "SELECT username, display_name, role, status, last_login, created_at FROM users WHERE username = $1"
+    )
+    .bind(&username)
+    .fetch_optional(&s.db).await.ok().flatten();
 
-// ── Logs de auditoria ─────────────────────────────────────────────────────────
-
-fn inserir_log_db(tipo: &str, mensagem: &str) {
-    if let Ok(conn) = Connection::open(DB_FILE) {
-        let _ = conn.execute(
-            "INSERT INTO logs (tipo, mensagem, timestamp) VALUES (?1, ?2, ?3)",
-            rusqlite::params![tipo, mensagem, now()],
-        );
+    match row {
+        Some(r) => Json(serde_json::json!({
+            "username":     r.try_get::<String, _>("username").unwrap_or_default(),
+            "display_name": r.try_get::<Option<String>, _>("display_name").ok().flatten(),
+            "role":         r.try_get::<String, _>("role").unwrap_or_default(),
+            "status":       r.try_get::<String, _>("status").unwrap_or_default(),
+        })),
+        None => Json(serde_json::json!({"ok": false, "erro": "Utilizador não encontrado"})),
     }
 }
 
-/// Regista um evento de auditoria de forma assíncrona (fire-and-forget).
-/// Pode ser chamado de qualquer contexto — sync ou async.
-fn log_evento(tipo: impl Into<String>, mensagem: impl Into<String>) {
-    let t = tipo.into();
-    let m = mensagem.into();
-    std::thread::spawn(move || inserir_log_db(&t, &m));
-}
+async fn create_usuario(
+    State(s):   State<Shared>,
+    admin:      AdminUser,
+    Json(req):  Json<CreateUserReq>,
+) -> Json<Value> {
+    let username = req.username.trim().to_lowercase();
+    if username.is_empty() { return Json(serde_json::json!({"ok": false, "erro": "username vazio"})); }
+    if req.password.len() < 8 { return Json(serde_json::json!({"ok": false, "erro": "password mínimo 8 caracteres"})); }
 
-fn ler_logs_db() -> Vec<serde_json::Value> {
-    let conn = match Connection::open(DB_FILE) { Ok(c) => c, Err(_) => return vec![] };
-    let mut stmt = match conn.prepare(
-        "SELECT id, tipo, mensagem, timestamp FROM logs ORDER BY id DESC LIMIT 500"
-    ) { Ok(s) => s, Err(_) => return vec![] };
-    stmt.query_map([], |row| {
-        Ok(serde_json::json!({
-            "id":        row.get::<_, i64>(0)?,
-            "tipo":      row.get::<_, String>(1)?,
-            "mensagem":  row.get::<_, String>(2)?,
-            "timestamp": row.get::<_, String>(3)?,
-        }))
-    })
-    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-    .unwrap_or_default()
-}
+    let role = req.role.as_deref().unwrap_or("operator").to_string();
+    if !["admin", "operator", "supervisor"].contains(&role.as_str()) {
+        return Json(serde_json::json!({"ok": false, "erro": "role inválido"}));
+    }
 
-async fn get_logs() -> Json<Value> {
-    match tokio::task::spawn_blocking(ler_logs_db).await {
-        Ok(lista) => Json(serde_json::json!(lista)),
-        Err(_)    => Json(serde_json::json!([])),
+    let password = req.password.clone();
+    let hash = tokio::task::spawn_blocking(move || {
+        let salt = SaltString::generate(&mut OsRng);
+        Argon2::default().hash_password(password.as_bytes(), &salt)
+            .map(|h| h.to_string())
+    }).await.ok().and_then(|r| r.ok());
+
+    let hash = match hash {
+        Some(h) => h,
+        None    => return Json(serde_json::json!({"ok": false, "erro": "Erro ao criar hash"})),
+    };
+
+    let res = sqlx::query(
+        "INSERT INTO users (username, password_hash, role, display_name) VALUES ($1, $2, $3, $4)"
+    )
+    .bind(&username).bind(&hash).bind(&role)
+    .bind(req.display_name.as_deref().unwrap_or(&username))
+    .execute(&s.db).await;
+
+    match res {
+        Ok(_) => {
+            let db = s.db.clone();
+            let msg = format!("Utilizador '{}' criado com role '{}' por '{}'", username, role, admin.0.username);
+            tokio::spawn(async move { log_evento_db(&db, "user_criado", &msg).await; });
+            Json(serde_json::json!({"ok": true}))
+        }
+        Err(e) if e.to_string().contains("unique") =>
+            Json(serde_json::json!({"ok": false, "erro": "Username já existe"})),
+        Err(e) =>
+            Json(serde_json::json!({"ok": false, "erro": format!("Erro DB: {}", e)})),
     }
 }
 
-// ── RDP ───────────────────────────────────────────────────────────────────────
+async fn update_usuario(
+    State(s):       State<Shared>,
+    admin:          AdminUser,
+    Path(username): Path<String>,
+    Json(req):      Json<UpdateUserReq>,
+) -> Json<Value> {
+    // Prevent admin from demoting themselves
+    if username == admin.0.username && req.status.as_deref() == Some("blocked") {
+        return Json(serde_json::json!({"ok": false, "erro": "Não pode bloquear a própria conta"}));
+    }
+
+    if let Some(ref role) = req.role {
+        if !["admin", "operator", "supervisor"].contains(&role.as_str()) {
+            return Json(serde_json::json!({"ok": false, "erro": "role inválido"}));
+        }
+    }
+    if let Some(ref status) = req.status {
+        if !["active", "blocked", "inactive"].contains(&status.as_str()) {
+            return Json(serde_json::json!({"ok": false, "erro": "status inválido"}));
+        }
+    }
+
+    let has_changes = req.display_name.is_some() || req.role.is_some()
+        || req.status.is_some() || req.blocked_reason.is_some() || req.allowed_eclusas.is_some();
+    if !has_changes {
+        return Json(serde_json::json!({"ok": false, "erro": "Nenhum campo para actualizar"}));
+    }
+
+    // Execute updates individually — avoids dynamic query complexity
+    if let Some(ref v) = req.display_name {
+        let _ = sqlx::query("UPDATE users SET display_name = $1 WHERE username = $2").bind(v).bind(&username).execute(&s.db).await;
+    }
+    if let Some(ref v) = req.role {
+        let _ = sqlx::query("UPDATE users SET role = $1 WHERE username = $2").bind(v).bind(&username).execute(&s.db).await;
+    }
+    if let Some(ref v) = req.status {
+        let _ = sqlx::query("UPDATE users SET status = $1 WHERE username = $2").bind(v).bind(&username).execute(&s.db).await;
+        if v == "blocked" {
+            let blocker_id: Option<uuid::Uuid> = sqlx::query_scalar(
+                "SELECT id FROM users WHERE username = $1"
+            ).bind(&admin.0.username).fetch_optional(&s.db).await.ok().flatten();
+            let _ = sqlx::query("UPDATE users SET blocked_at = NOW(), blocked_by = $1 WHERE username = $2")
+                .bind(blocker_id).bind(&username).execute(&s.db).await;
+        }
+    }
+    if let Some(ref v) = req.blocked_reason {
+        let _ = sqlx::query("UPDATE users SET blocked_reason = $1 WHERE username = $2").bind(v).bind(&username).execute(&s.db).await;
+    }
+
+    let db = s.db.clone();
+    let msg = format!("Utilizador '{}' actualizado por '{}'", username, admin.0.username);
+    tokio::spawn(async move { log_evento_db(&db, "user_actualizado", &msg).await; });
+
+    Json(serde_json::json!({"ok": true}))
+}
+
+async fn delete_usuario(
+    State(s):       State<Shared>,
+    admin:          AdminUser,
+    Path(username): Path<String>,
+) -> Json<Value> {
+    if username == admin.0.username {
+        return Json(serde_json::json!({"ok": false, "erro": "Não pode eliminar a própria conta"}));
+    }
+    let res = sqlx::query("DELETE FROM users WHERE username = $1")
+        .bind(&username).execute(&s.db).await;
+    match res {
+        Ok(r) if r.rows_affected() > 0 => {
+            let db = s.db.clone();
+            let msg = format!("Utilizador '{}' eliminado por '{}'", username, admin.0.username);
+            tokio::spawn(async move { log_evento_db(&db, "user_eliminado", &msg).await; });
+            Json(serde_json::json!({"ok": true}))
+        }
+        Ok(_)  => Json(serde_json::json!({"ok": false, "erro": "Utilizador não encontrado"})),
+        Err(e) => Json(serde_json::json!({"ok": false, "erro": format!("Erro DB: {}", e)})),
+    }
+}
+
+// ── IP Blacklist ──────────────────────────────────────────────────────────────
+
+async fn list_blacklist(State(s): State<Shared>, _admin: AdminUser) -> Json<Value> {
+    let rows = sqlx::query(
+        "SELECT id, ip::text, reason, created_at, expires_at, active FROM ip_blacklist ORDER BY created_at DESC LIMIT 200"
+    )
+    .fetch_all(&s.db).await.unwrap_or_default();
+
+    let list: Vec<Value> = rows.iter().map(|r| serde_json::json!({
+        "id":         r.try_get::<i32, _>("id").unwrap_or(0),
+        "ip":         r.try_get::<String, _>("ip").unwrap_or_default(),
+        "reason":     r.try_get::<Option<String>, _>("reason").ok().flatten(),
+        "active":     r.try_get::<bool, _>("active").unwrap_or(false),
+        "created_at": r.try_get::<chrono::DateTime<Utc>, _>("created_at").ok().map(|t| t.to_rfc3339()),
+    })).collect();
+
+    Json(serde_json::json!(list))
+}
+
+async fn add_blacklist(
+    State(s):   State<Shared>,
+    admin:      AdminUser,
+    Json(req):  Json<BlacklistReq>,
+) -> Json<Value> {
+    let blocker_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    ).bind(&admin.0.username).fetch_optional(&s.db).await.ok().flatten();
+
+    let res = sqlx::query(
+        "INSERT INTO ip_blacklist (ip, reason, blocked_by) VALUES ($1::inet, $2, $3)"
+    )
+    .bind(&req.ip).bind(req.reason.as_deref()).bind(blocker_id)
+    .execute(&s.db).await;
+
+    match res {
+        Ok(_)  => Json(serde_json::json!({"ok": true})),
+        Err(e) => Json(serde_json::json!({"ok": false, "erro": format!("Erro DB: {}", e)})),
+    }
+}
+
+async fn remove_blacklist(
+    State(s):  State<Shared>,
+    admin:     AdminUser,
+    Path(id):  Path<i32>,
+) -> Json<Value> {
+    let remover_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    ).bind(&admin.0.username).fetch_optional(&s.db).await.ok().flatten();
+
+    let res = sqlx::query(
+        "UPDATE ip_blacklist SET active = FALSE, removed_at = NOW(), removed_by = $1 WHERE id = $2"
+    )
+    .bind(remover_id).bind(id).execute(&s.db).await;
+
+    match res {
+        Ok(r) if r.rows_affected() > 0 => Json(serde_json::json!({"ok": true})),
+        Ok(_)  => Json(serde_json::json!({"ok": false, "erro": "Não encontrado"})),
+        Err(e) => Json(serde_json::json!({"ok": false, "erro": format!("Erro DB: {}", e)})),
+    }
+}
+
+// ── Logs ─────────────────────────────────────────────────────────────────────
+
+async fn get_logs(State(s): State<Shared>, _auth: AuthUser) -> Json<Value> {
+    let rows = sqlx::query(
+        "SELECT id, event_type, description, ip_address::text, created_at FROM audit_events ORDER BY created_at DESC LIMIT 500"
+    )
+    .fetch_all(&s.db).await.unwrap_or_default();
+
+    let logs: Vec<Value> = rows.iter().map(|r| serde_json::json!({
+        "id":          r.try_get::<i64, _>("id").unwrap_or(0),
+        "tipo":        r.try_get::<String, _>("event_type").unwrap_or_default(),
+        "mensagem":    r.try_get::<Option<String>, _>("description").ok().flatten().unwrap_or_default(),
+        "timestamp":   r.try_get::<chrono::DateTime<Utc>, _>("created_at").ok().map(|t| t.to_rfc3339()).unwrap_or_default(),
+    })).collect();
+
+    Json(serde_json::json!(logs))
+}
+
+// ── DB helpers ────────────────────────────────────────────────────────────────
+
+async fn log_evento_db(db: &PgPool, event_type: &str, description: &str) {
+    let _ = sqlx::query(
+        "INSERT INTO audit_events (event_type, description) VALUES ($1, $2)"
+    )
+    .bind(event_type).bind(description)
+    .execute(db).await;
+}
+
+fn log_evento_sync(db: &PgPool, event_type: &str, description: &str) {
+    let db = db.clone();
+    let t  = event_type.to_string();
+    let d  = description.to_string();
+    tokio::spawn(async move { log_evento_db(&db, &t, &d).await; });
+}
+
+async fn load_operadores_db(db: &PgPool) -> Vec<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT username FROM users WHERE role = 'operator' AND status = 'active' ORDER BY username"
+    )
+    .fetch_all(db).await.unwrap_or_default()
+}
+
+// ── RDP helpers ───────────────────────────────────────────────────────────────
 
 fn verificar_rdp(ip: &str) -> RdpInfo {
     match Command::new("qwinsta").arg(format!("/server:{}", ip)).output() {
@@ -892,7 +1260,7 @@ fn verificar_rdp(ip: &str) -> RdpInfo {
             RdpInfo { ocupado, utilizador, verificado: true, timestamp: now(), nome_sessao, sessao_id, ..Default::default() }
         }
         Err(e) => {
-            println!("[{}] qwinsta {} erro: {}", now(), ip, e);
+            eprintln!("[{}] qwinsta {} erro: {}", now(), ip, e);
             RdpInfo { verificado: false, timestamp: now(), ..Default::default() }
         }
     }
@@ -929,15 +1297,9 @@ fn obter_ip_cliente_rdp(server_ip: &str, session_id: u32, _cfg: &Config) -> Opti
             if addr.AddressFamily == 2 {
                 let a = &addr.Address;
                 let ip = format!("{}.{}.{}.{}", a[2], a[3], a[4], a[5]);
-                if ip != "0.0.0.0" && !ip.starts_with("0.") {
-                    println!("[{}] IP cliente RDP em {}: {}", now(), server_ip, ip);
-                    Some(ip)
-                } else { None }
+                if ip != "0.0.0.0" && !ip.starts_with("0.") { Some(ip) } else { None }
             } else { None }
-        } else {
-            println!("[{}] WTSQuery falhou em {} sessão {} — {:?}", now(), server_ip, session_id, ok.err());
-            None
-        };
+        } else { None };
         if !buf.is_null() { WTSFreeMemory(buf.as_ptr() as *mut _); }
         WTSCloseServer(server);
         ip
@@ -946,48 +1308,38 @@ fn obter_ip_cliente_rdp(server_ip: &str, session_id: u32, _cfg: &Config) -> Opti
 
 fn desbloquear_ip_firewall(server_ip: &str, client_ip: &str, cfg: &Config) {
     let rule_name = format!("EDP-Block-RDP-{}", client_ip.replace('.', "-"));
-    let ps  = format!(
-        "Remove-NetFirewallRule -DisplayName '{name}' -ErrorAction SilentlyContinue; Write-Output 'OK'",
-        name = rule_name
+    let ps = format!(
+        "Remove-NetFirewallRule -DisplayName '{}' -ErrorAction SilentlyContinue; Write-Output 'OK'",
+        rule_name
     );
     let cmd = format!("powershell.exe -NonInteractive -Command \"{}\"", ps);
-    match Command::new("wmic").args([
+    let _ = Command::new("wmic").args([
         &format!("/node:{}", server_ip), &format!("/user:{}", cfg.rdp_user),
         &format!("/password:{}", cfg.rdp_password), "process", "call", "create", &cmd,
-    ]).output() {
-        Ok(_)  => println!("[{}] IP {} desbloqueado em {}", now(), client_ip, server_ip),
-        Err(e) => println!("[{}] Desbloqueio {} em {} falhou: {}", now(), client_ip, server_ip, e),
-    }
+    ]).output();
     std::thread::sleep(std::time::Duration::from_secs(3));
 }
 
 fn limpar_bloqueios_firewall(server_ip: &str, cfg: &Config) {
     let ps  = "Get-NetFirewallRule -DisplayName 'EDP-Block-RDP-*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule; Write-Output 'OK'";
     let cmd = format!("powershell.exe -NonInteractive -Command \"{}\"", ps);
-    match Command::new("wmic").args([
+    let _ = Command::new("wmic").args([
         &format!("/node:{}", server_ip), &format!("/user:{}", cfg.rdp_user),
         &format!("/password:{}", cfg.rdp_password), "process", "call", "create", &cmd,
-    ]).output() {
-        Ok(_)  => println!("[{}] Bloqueios limpos em {}", now(), server_ip),
-        Err(e) => println!("[{}] Limpeza bloqueios em {} — {}", now(), server_ip, e),
-    }
+    ]).output();
+    eprintln!("[{}] Bloqueios de firewall limpos em {}", now(), server_ip);
 }
 
-// Configura shadow mode no servidor: view-only sem precisar de consentimento do operador
-// Shadow=4: View-only without user's permission (Windows Server 2012 R2+)
 fn configurar_shadow_servidor(server_ip: &str, cfg: &Config) {
-    let ps = "$p='HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services'; \
-        if(-not(Test-Path $p)){New-Item -Path $p -Force|Out-Null}; \
-        Set-ItemProperty -Path $p -Name 'Shadow' -Value 4 -Type DWord -Force; \
-        Write-Output 'OK'";
+    let ps  = "$p='HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services'; \
+               if(-not(Test-Path $p)){New-Item -Path $p -Force|Out-Null}; \
+               Set-ItemProperty -Path $p -Name 'Shadow' -Value 4 -Type DWord -Force; Write-Output 'OK'";
     let cmd = format!("powershell.exe -NonInteractive -Command \"{}\"", ps);
-    match Command::new("wmic").args([
+    let _ = Command::new("wmic").args([
         &format!("/node:{}", server_ip), &format!("/user:{}", cfg.rdp_user),
         &format!("/password:{}", cfg.rdp_password), "process", "call", "create", &cmd,
-    ]).output() {
-        Ok(_)  => println!("[{}] Shadow full-control configurado em {}", now(), server_ip),
-        Err(e) => println!("[{}] Shadow config em {} falhou: {}", now(), server_ip, e),
-    }
+    ]).output();
+    eprintln!("[{}] Shadow mode configurado em {}", now(), server_ip);
 }
 
 fn bloquear_ip_firewall(server_ip: &str, client_ip: &str, cfg: &Config) {
@@ -1001,21 +1353,15 @@ fn bloquear_ip_firewall(server_ip: &str, client_ip: &str, cfg: &Config) {
         name = rule_name, ip = client_ip
     );
     let cmd = format!("powershell.exe -NonInteractive -Command \"{}\"", ps);
-    match Command::new("wmic").args([
+    let _ = Command::new("wmic").args([
         &format!("/node:{}", server_ip), &format!("/user:{}", cfg.rdp_user),
         &format!("/password:{}", cfg.rdp_password), "process", "call", "create", &cmd,
-    ]).output() {
-        Ok(o) => {
-            let out = String::from_utf8_lossy(&o.stdout);
-            println!("[{}] Firewall block {} em {}: {}", now(), client_ip, server_ip,
-                out.trim().lines().next().unwrap_or("iniciado"));
-            std::thread::sleep(std::time::Duration::from_secs(4));
-        }
-        Err(e) => println!("[{}] Firewall block falhou {} em {}: {}", now(), client_ip, server_ip, e),
-    }
+    ]).output();
+    eprintln!("[{}] IP {} bloqueado em {}", now(), client_ip, server_ip);
+    std::thread::sleep(std::time::Duration::from_secs(4));
 }
 
-// ── Eclusas ───────────────────────────────────────────────────────────────────
+// ── Eclusa file helpers ───────────────────────────────────────────────────────
 
 fn ler_eclusas() -> Value {
     match fs::read_to_string(ECLUSAS_FILE) {

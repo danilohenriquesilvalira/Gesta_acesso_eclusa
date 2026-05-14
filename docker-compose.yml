@@ -1,0 +1,44 @@
+services:
+  gestao-acesso-db:
+    image: postgres:16-alpine
+    container_name: gestao-acesso-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-gestao_acesso_eclusa}
+      POSTGRES_USER:     ${POSTGRES_USER:-eclusa_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_PORT:-5435}:5432"
+    volumes:
+      - gestao_acesso_data:/var/lib/postgresql/data
+      - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./infra/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eclusa_admin} -d ${POSTGRES_DB:-gestao_acesso_eclusa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gestao_acesso_net
+
+  gestao-acesso-pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: gestao-acesso-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL:    ${PGADMIN_EMAIL:-admin@eclusa.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT:-5052}:80"
+    depends_on:
+      gestao-acesso-db:
+        condition: service_healthy
+    networks:
+      - gestao_acesso_net
+
+volumes:
+  gestao_acesso_data:
+
+networks:
+  gestao_acesso_net:
+    driver: bridge
