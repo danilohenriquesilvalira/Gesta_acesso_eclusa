@@ -8,7 +8,7 @@ import EclusaAcessoCard    from "./components/eclusa/EclusaAcessoCard";
 import EclusaMonitorCard   from "./components/eclusa/EclusaMonitorCard";
 import AdminUtilizadores   from "./components/admin/AdminUtilizadores";
 import AdminLogs           from "./components/admin/AdminLogs";
-import Apresentacao        from "./components/Apresentacao";
+import RedeAnalise         from "./components/RedeAnalise";
 
 // ── Tipos exportados ──────────────────────────────────────────────────────────
 
@@ -36,20 +36,19 @@ export interface RdpInfo {
 export interface Supervisao {
   supervisor: string;
   timestamp:  string;
-  ativo:      boolean;
 }
 
 export interface Estado {
   sessoes:     { cliente1: Sessao; cliente2: Sessao };
   rdp:         { cliente1: RdpInfo; cliente2: RdpInfo };
   eclusas:     { timestamp: string; eclusas: { [k: string]: Eclusa } };
-  supervisoes: { cliente1: Supervisao; cliente2: Supervisao };
+  supervisoes: { cliente1: Supervisao[]; cliente2: Supervisao[] };
   operadores:  string[];
   timestamp:   string;
 }
 
 type ClienteKey = "cliente1" | "cliente2";
-type Pagina     = "dashboard" | "admin-usuarios" | "admin-logs" | "apresentacao";
+type Pagina     = "dashboard" | "admin-usuarios" | "admin-logs" | "rede";
 interface Config { api_url: string }
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -58,14 +57,14 @@ const DEFAULT_API = "http://172.29.164.10:8080";
 
 // IPs dos servidores WinCC
 const CLIENTES: Record<ClienteKey, { nome: string; ip: string }> = {
-  cliente1: { nome: "WinCC Cliente 1", ip: "172.29.164.54" },
-  cliente2: { nome: "WinCC Cliente 2", ip: "172.29.164.58" },
+  cliente1: { nome: "WinCC Cliente 1", ip: "172.29.164.49" },
+  cliente2: { nome: "WinCC Cliente 2", ip: "172.29.164.51" },
 };
 
 // Mapeamento de cada eclusa ao servidor WinCC que a controla
 const ECLUSA_CLIENTE: Record<string, ClienteKey> = {
-  RG: "cliente1", // Posto 1 - Régua (172.29.164.54)
-  PN: "cliente2", // Posto 2 - Pocinho (172.29.164.58)
+  RG: "cliente1", // Posto 1 - Régua (172.29.164.49)
+  PN: "cliente2", // Posto 2 - Pocinho (172.29.164.51)
 };
 
 const ECLUSA_KEYS = ["IND1", "IND2", "RG", "IND4", "PN"] as const;
@@ -115,6 +114,25 @@ export default function App() {
       .catch(() => setApiOk(false));
   }, [apiUrl]);
 
+  // Encerrar sessão RDP — limpa estado imediatamente (sem esperar pela API)
+  const handleEncerrar = useCallback(async (cliente: ClienteKey) => {
+    // Limpa sessão imediatamente na UI — supervisão fica intacta até API confirmar
+    setEstado(prev => prev ? {
+      ...prev,
+      sessoes: { ...prev.sessoes, [cliente]: { operador: "", timestamp_inicio: "", conectado: false } },
+    } : prev);
+
+    try { await invoke("fechar_rdp"); } catch { /* ignora */ }
+    try {
+      await fetch(`${apiUrl}/sessoes/encerrar`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ cliente }),
+      });
+      fetchEstado();
+    } catch { /* ignora */ }
+  }, [apiUrl, fetchEstado]);
+
   // SSE + fallback polling
   useEffect(() => {
     fetchEstado();
@@ -133,7 +151,7 @@ export default function App() {
       handleEncerrar(event.payload as ClienteKey);
     });
     return () => { unlisten.then(fn => fn()); };
-  }, [apiUrl]);
+  }, [handleEncerrar]);
 
   // Evento shadow fechado → encerrar supervisão na API e limpar estado local
   useEffect(() => {
@@ -155,7 +173,7 @@ export default function App() {
   const sessao     = (k: ClienteKey): Sessao     => estado?.sessoes[k]      ?? { operador: "", timestamp_inicio: "", conectado: false };
   const rdpInfo    = (k: ClienteKey): RdpInfo    => estado?.rdp?.[k]        ?? { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false };
   const eclusa     = (key: string): Eclusa | undefined => estado?.eclusas?.eclusas?.[key];
-  const supervisao = (k: ClienteKey): Supervisao => estado?.supervisoes?.[k] ?? { supervisor: "", timestamp: "", ativo: false };
+  const supervisoes = (k: ClienteKey): Supervisao[] => estado?.supervisoes?.[k] ?? [];
 
   const handleConectar = async (cliente: ClienteKey) => {
     if (!utilizador) { setLoginAberto(true); return; }
@@ -234,28 +252,16 @@ export default function App() {
       fetch(`${apiUrl}/supervisao/encerrar`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ cliente: emSupervisao }),
+        body:    JSON.stringify({ cliente: emSupervisao, supervisor: utilizador }),
       }).catch(() => {});
     }
     try { await invoke("fechar_shadow"); } catch { /* ignora */ }
     setEmSupervisao(null);
   };
 
-  const handleEncerrar = async (cliente: ClienteKey) => {
-    try { await invoke("fechar_rdp"); } catch { /* ignora */ }
-    try {
-      await fetch(`${apiUrl}/sessoes/encerrar`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ cliente }),
-      });
-      fetchEstado();
-    } catch { /* ignora */ }
-  };
+  // ── Página de Rede & Latência ────────────────────────────────────────────────
 
-  // ── Página de Apresentação ──────────────────────────────────────────────────
-
-  if (pagina === "apresentacao") {
+  if (pagina === "rede") {
     return (
       <div className="h-screen flex flex-col overflow-hidden font-sans" style={{ background: "#212E3E" }}>
         <Header
@@ -268,7 +274,7 @@ export default function App() {
           onLoginClick={() => setLoginAberto(true)}
           onSair={() => { setUtilizador(""); setPagina("dashboard"); }}
         />
-        <Apresentacao />
+        <RedeAnalise />
       </div>
     );
   }
@@ -288,7 +294,7 @@ export default function App() {
           onLoginClick={() => setLoginAberto(true)}
           onSair={() => { setUtilizador(""); setPagina("dashboard"); }}
         />
-        {(pagina === "admin-utilizadores" || pagina === "admin-usuarios")
+        {pagina === "admin-usuarios"
           ? <AdminUtilizadores apiUrl={apiUrl} />
           : <AdminLogs apiUrl={apiUrl} />
         }
@@ -366,8 +372,9 @@ export default function App() {
                   nome={key}
                   eclusa={eclusa(key)}
                   ehAdmin={ehAdmin}
+                  sessaoAtiva={cliente ? (sessao(cliente).conectado || rdpInfo(cliente).ocupado) : false}
                   emSupervisao={cliente ? emSupervisao === cliente : false}
-                  supervisaoAtiva={cliente ? supervisao(cliente) : { supervisor: "", timestamp: "", ativo: false }}
+                  supervisoesAtivas={cliente ? supervisoes(cliente) : []}
                   utilizadorAtual={utilizador}
                   onSupervisao={() => cliente && handleSupervisao(cliente)}
                   onSairSupervisao={handleSairSupervisao}

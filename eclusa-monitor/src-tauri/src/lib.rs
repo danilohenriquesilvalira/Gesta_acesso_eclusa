@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::sync::Mutex;
 use tauri::Emitter;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -22,8 +26,8 @@ impl Default for Config {
             api_url:      "http://172.29.164.10:8080".to_string(),
             rdp_user:     "Administrator".to_string(),
             rdp_password: "Rls@2024".to_string(),
-            ip_cliente1:  "172.29.164.54".to_string(),
-            ip_cliente2:  "172.29.164.58".to_string(),
+            ip_cliente1:  "172.29.164.49".to_string(),
+            ip_cliente2:  "172.29.164.51".to_string(),
         }
     }
 }
@@ -124,7 +128,10 @@ fn get_config() -> Config {
 fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String {
     let cfg = load_config();
 
+    // Armazena credenciais ANTES de lançar mstsc (NLA precisa delas prontas)
+    // CREATE_NO_WINDOW: processo oculto, sem flash de janela
     let _ = Command::new("cmdkey")
+        .creation_flags(CREATE_NO_WINDOW)
         .args([
             &format!("/generic:{ip}"),
             &format!("/user:{}", cfg.rdp_user),
@@ -133,6 +140,7 @@ fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String {
         .output();
 
     let _ = Command::new("reg")
+        .creation_flags(CREATE_NO_WINDOW)
         .args([
             "add",
             "HKCU\\Software\\Microsoft\\Terminal Server Client",
@@ -156,7 +164,10 @@ fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String {
 /// Fecha mstsc de operação silenciosamente.
 #[tauri::command]
 fn fechar_rdp() {
-    let _ = Command::new("taskkill").args(["/F", "/IM", "mstsc.exe"]).output();
+    let _ = Command::new("taskkill")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["/F", "/IM", "mstsc.exe"])
+        .output();
 }
 
 /// Abre supervisão shadow (view-only) com o sessao_id fornecido pela API.
@@ -185,6 +196,7 @@ fn connect_shadow(
     // Guarda credenciais nos dois formatos que mstsc consulta para shadow
     for target in [ip.as_str(), &format!("TERMSRV/{ip}")] {
         let _ = Command::new("cmdkey")
+            .creation_flags(CREATE_NO_WINDOW)
             .args([
                 &format!("/generic:{target}"),
                 &format!("/user:{}", cfg.rdp_user),
@@ -221,6 +233,7 @@ fn connect_shadow(
 fn fechar_shadow(state: tauri::State<ShadowState>) {
     for pid in state.0.lock().unwrap().drain(..) {
         let _ = Command::new("taskkill")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["/F", "/PID", &pid.to_string()])
             .output();
     }

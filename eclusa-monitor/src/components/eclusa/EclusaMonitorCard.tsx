@@ -4,15 +4,16 @@ interface Props {
   nome: string;
   eclusa: Eclusa | undefined;
   ehAdmin: boolean;
+  sessaoAtiva: boolean;
   emSupervisao: boolean;
-  supervisaoAtiva: Supervisao;
+  supervisoesAtivas: Supervisao[];
   utilizadorAtual: string;
   onSupervisao: () => void;
   onSairSupervisao: () => void;
 }
 
 export default function EclusaMonitorCard({
-  nome, eclusa, ehAdmin, emSupervisao, supervisaoAtiva,
+  nome, eclusa, ehAdmin, sessaoAtiva, emSupervisao, supervisoesAtivas,
   utilizadorAtual, onSupervisao, onSairSupervisao,
 }: Props) {
   if (nome.startsWith("IND")) {
@@ -31,13 +32,14 @@ export default function EclusaMonitorCard({
     );
   }
 
-  const emOperacao = (eclusa?.status ?? 0) >= 1;
-  const euSuperviso = emSupervisao || (supervisaoAtiva.ativo && supervisaoAtiva.supervisor.toLowerCase() === utilizadorAtual.toLowerCase());
-  const outroSuperv = supervisaoAtiva.ativo && !euSuperviso;
+  const emOperacao = sessaoAtiva;
+  const euSuperviso = emSupervisao;
+  const outrosSuperv = supervisoesAtivas.filter(s => s.supervisor.toLowerCase() !== utilizadorAtual.toLowerCase());
+  const hasAnySuperv = supervisoesAtivas.length > 0;
 
-  // Cor e label baseados APENAS no estado da sessão de supervisão (API), não no status físico do WinCC
-  const accentColor = euSuperviso ? "#3b82f6" : outroSuperv ? "#E30613" : "#00A651";
-  const statusLabel = euSuperviso ? "Em Supervisão" : outroSuperv ? "Ocupado" : "Livre";
+  // Cor: azul se eu supervisiono, vermelho se outros supervisionam (e eu não), verde se livre
+  const accentColor = euSuperviso ? "#3b82f6" : hasAnySuperv ? "#E30613" : "#00A651";
+  const statusLabel = euSuperviso ? "Em Supervisão" : hasAnySuperv ? `Supervisão (${supervisoesAtivas.length})` : "Livre";
 
   const isWhite = nome === "RG" || nome === "PN";
 
@@ -58,7 +60,7 @@ export default function EclusaMonitorCard({
         </div>
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold mt-0.5 ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.07]"}`}
           style={{ color: accentColor }}>
-          <span className="w-2 h-2 rounded-full" style={{ background: accentColor, animation: (euSuperviso || outroSuperv) ? "pulse 1.5s infinite" : "none" }} />
+          <span className="w-2 h-2 rounded-full" style={{ background: accentColor, animation: (euSuperviso || hasAnySuperv) ? "pulse 1.5s infinite" : "none" }} />
           {statusLabel}
         </div>
       </div>
@@ -72,6 +74,16 @@ export default function EclusaMonitorCard({
               <p className={`text-[10px] font-bold uppercase tracking-wide ${isWhite ? "text-blue-600" : "text-blue-400"}`}>A supervisionar</p>
               <p className={`font-black mt-1 ${isWhite ? "text-[18px] text-[#1B2F48]" : "text-[13px] text-white"}`}>{utilizadorAtual}</p>
             </div>
+            {outrosSuperv.length > 0 && (
+              <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.05] border border-white/10"}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${isWhite ? "text-slate-500" : "text-white/40"}`}>Também a supervisionar</p>
+                <div className="flex flex-col gap-1">
+                  {outrosSuperv.map((s, i) => (
+                    <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#1B2F48]" : "text-white/80"}`}>• {s.supervisor}</p>
+                  ))}
+                </div>
+              </div>
+            )}
             {eclusa?.modo && (
               <div className="flex items-center gap-4">
                 <div className={`p-2 rounded-xl ${isWhite ? "bg-slate-50" : "bg-white/[0.05]"}`}>
@@ -86,10 +98,14 @@ export default function EclusaMonitorCard({
               </div>
             )}
           </div>
-        ) : outroSuperv ? (
-          <div className={`px-4 py-4 rounded-xl ${isWhite ? "bg-blue-50 border border-blue-100" : "bg-blue-500/10 border border-blue-500/20"}`}>
-            <p className={`text-[10px] font-bold uppercase tracking-wide ${isWhite ? "text-blue-600" : "text-blue-400"}`}>Supervisão Ativa</p>
-            <p className={`font-black mt-1 ${isWhite ? "text-[18px] text-[#1B2F48]" : "text-[13px] text-white"}`}>{supervisaoAtiva.supervisor}</p>
+        ) : hasAnySuperv ? (
+          <div className={`px-4 py-4 rounded-xl ${isWhite ? "bg-red-50 border border-red-100" : "bg-red-500/10 border border-red-500/20"}`}>
+            <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${isWhite ? "text-red-600" : "text-red-400"}`}>Supervisão Ativa</p>
+            <div className="flex flex-col gap-1">
+              {supervisoesAtivas.map((s, i) => (
+                <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#1B2F48]" : "text-white/80"}`}>• {s.supervisor}</p>
+              ))}
+            </div>
           </div>
         ) : eclusa ? (
           <div className="flex flex-col gap-4">
@@ -153,10 +169,6 @@ export default function EclusaMonitorCard({
             >
               Sair de Supervisão
             </button>
-          ) : outroSuperv ? (
-            <div className={`py-2.5 rounded-xl text-center text-[11px] font-bold ${isWhite ? "text-white bg-[#991B1B]" : "bg-white/[0.04] text-white/20"}`}>
-              Sessão Bloqueada — {supervisaoAtiva.supervisor} a supervisionar
-            </div>
           ) : (
             <button
               onClick={onSupervisao}

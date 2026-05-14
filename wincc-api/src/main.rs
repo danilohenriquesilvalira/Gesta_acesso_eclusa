@@ -54,8 +54,8 @@ fn load_config() -> Config {
 }
 
 const CLIENTES_IPS: [(&str, &str); 2] = [
-    ("cliente1", "172.29.164.54"),
-    ("cliente2", "172.29.164.58"),
+    ("cliente1", "172.29.164.49"),
+    ("cliente2", "172.29.164.51"),
 ];
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -85,11 +85,10 @@ struct Sessoes { cliente1: Sessao, cliente2: Sessao }
 struct Supervisao {
     supervisor: String,
     timestamp:  String,
-    ativo:      bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct Supervisoes { cliente1: Supervisao, cliente2: Supervisao }
+struct Supervisoes { cliente1: Vec<Supervisao>, cliente2: Vec<Supervisao> }
 
 #[derive(Debug, Clone)]
 struct AppState {
@@ -124,12 +123,13 @@ impl Default for AppState {
 
 // ── Request types ─────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)] struct IniciarReq      { cliente: String, operador: String }
-#[derive(Debug, Deserialize)] struct EncerrarReq     { cliente: String }
-#[derive(Debug, Deserialize)] struct SupervisaoReq   { cliente: String, supervisor: String }
-#[derive(Debug, Deserialize)] struct OperadorReq     { nome: String }
-#[derive(Debug, Deserialize)] struct LoginReq        { username: String, password: String }
-#[derive(Debug, Deserialize)] struct UsuarioReq      { username: String, password: String }
+#[derive(Debug, Deserialize)] struct IniciarReq             { cliente: String, operador: String }
+#[derive(Debug, Deserialize)] struct EncerrarReq            { cliente: String }
+#[derive(Debug, Deserialize)] struct SupervisaoReq          { cliente: String, supervisor: String }
+#[derive(Debug, Deserialize)] struct EncerrarSupervisaoReq  { cliente: String, supervisor: String }
+#[derive(Debug, Deserialize)] struct OperadorReq            { nome: String }
+#[derive(Debug, Deserialize)] struct LoginReq               { username: String, password: String }
+#[derive(Debug, Deserialize)] struct UsuarioReq             { username: String, password: String }
 
 #[derive(Debug, Deserialize)]
 struct EclusaEstadoReq {
@@ -194,26 +194,28 @@ async fn main() {
                     new_info.nao_autorizado = nao_aut;
                     st.rdp.insert(cliente.to_string(), new_info);
 
-                    // Auto-limpar supervisão se a sessão RDP terminou
+                    // Auto-limpar supervisões se a sessão RDP terminou
                     if !info.ocupado {
                         let sup = match *cliente {
                             "cliente1" => &mut st.supervisoes.cliente1,
                             "cliente2" => &mut st.supervisoes.cliente2,
                             _          => continue,
                         };
-                        if sup.ativo {
+                        if !sup.is_empty() {
                             println!("[{}] SUPERVISAO auto-encerrada (RDP livre) em {}", now(), cliente);
-                            *sup = Supervisao::default();
+                            sup.clear();
                         }
                     }
 
                     if grace && nao_aut && info.nome_sessao.starts_with("rdp-tcp#") {
                         if let Some(sid) = info.sessao_id {
-                            println!("[{}] NAO AUTORIZADO: {} em {} — a desconectar", now(), info.utilizador, ip);
+    println!("[{}] NAO AUTORIZADO: {} em {} — a desconectar", now(), info.utilizador, ip);
+                            log_evento("bloqueio", format!("Acesso não autorizado detectado: utilizador '{}' em {} ({})", info.utilizador, cliente, ip));
                             kills.push((ip.to_string(), sid));
                         }
                     } else if nao_aut && mudou_ocupado {
                         println!("[{}] AVISO nao autorizado em {} — {} (grace activo)", now(), ip, info.utilizador);
+                        log_evento("bloqueio", format!("Acesso não autorizado (grace ativo): '{}' em {} ({})", info.utilizador, cliente, ip));
                     } else if !info.verificado && mudou_verif {
                         println!("[{}] RDP {} inacessivel ({})", now(), cliente, ip);
                     } else if info.verificado && mudou_verif {
@@ -281,6 +283,7 @@ async fn main() {
         .route("/auth/login",           post(auth_login))
         .route("/usuarios",             get(list_usuarios).post(create_usuario))
         .route("/usuarios/:username",   delete(delete_usuario))
+        .route("/logs",                  get(get_logs))
         .with_state(state)
         .layer(cors)
         .layer(compression);
@@ -481,6 +484,11 @@ async fn iniciar(
         _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
     }
     broadcast_estado(&st);
+    let op = match req.cliente.as_str() {
+        "cliente1" => st.sessoes.cliente1.operador.clone(),
+        _          => st.sessoes.cliente2.operador.clone(),
+    };
+    log_evento("acesso", format!("Sessão iniciada: {} em {} (IP: {})", op, req.cliente, caller_ip));
     Json(serde_json::json!({"ok": true}))
 }
 
@@ -505,16 +513,16 @@ async fn encerrar(State(s): State<Shared>, Json(req): Json<EncerrarReq>) -> Json
         match req.cliente.as_str() {
             "cliente1" => {
                 st.sessoes.cliente1 = Sessao::default();
-                if st.supervisoes.cliente1.ativo {
+                if !st.supervisoes.cliente1.is_empty() {
                     println!("[{}] SUPERVISAO auto-encerrada com sessao {}", now(), req.cliente);
-                    st.supervisoes.cliente1 = Supervisao::default();
+                    st.supervisoes.cliente1.clear();
                 }
             }
             "cliente2" => {
                 st.sessoes.cliente2 = Sessao::default();
-                if st.supervisoes.cliente2.ativo {
+                if !st.supervisoes.cliente2.is_empty() {
                     println!("[{}] SUPERVISAO auto-encerrada com sessao {}", now(), req.cliente);
-                    st.supervisoes.cliente2 = Supervisao::default();
+                    st.supervisoes.cliente2.clear();
                 }
             }
             _ => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
@@ -523,6 +531,7 @@ async fn encerrar(State(s): State<Shared>, Json(req): Json<EncerrarReq>) -> Json
     }
 
     println!("[{}] ENCERRAR {}", now(), req.cliente);
+    log_evento("encerrar", format!("Sessão encerrada em {}", req.cliente));
 
     // Desconectar sessão RDP em background — fire-and-forget
     if let Some((ip, sid)) = kill_info {
@@ -544,63 +553,52 @@ async fn encerrar(State(s): State<Shared>, Json(req): Json<EncerrarReq>) -> Json
     Json(serde_json::json!({"ok": true}))
 }
 
-// POST /supervisao/iniciar — interlocks + regista supervisor
+// POST /supervisao/iniciar — regista supervisor (múltiplos permitidos)
 async fn iniciar_supervisao(State(s): State<Shared>, Json(req): Json<SupervisaoReq>) -> Json<Value> {
-    // Leitura para verificar interlocks
+    // Verificar se há sessão RDP activa
     let (sessao_id, server_ip) = {
         let st = s.read().await;
-
-        // Verificar se há sessão RDP activa
         let ip = match req.cliente.as_str() {
             "cliente1" => CLIENTES_IPS[0].1.to_string(),
             "cliente2" => CLIENTES_IPS[1].1.to_string(),
             _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
         };
-        let rdp = st.rdp.get(&req.cliente);
-        let sid = rdp.and_then(|r| if r.ocupado { r.sessao_id } else { None });
+        let sid = st.rdp.get(&req.cliente)
+            .and_then(|r| if r.ocupado { r.sessao_id } else { None });
         match sid {
             Some(id) => (id, ip),
             None     => return Json(serde_json::json!({"ok": false, "erro": "Sem sessão RDP activa — operador não está conectado"})),
         }
     };
 
-    // Segunda leitura: verificar se já existe supervisor activo
-    {
-        let st = s.read().await;
-        let sup = match req.cliente.as_str() {
-            "cliente1" => &st.supervisoes.cliente1,
-            _          => &st.supervisoes.cliente2,
-        };
-        if sup.ativo {
-            return Json(serde_json::json!({
-                "ok":   false,
-                "erro": format!("Supervisão já activa por {}", sup.supervisor)
-            }));
-        }
+    let mut st = s.write().await;
+    let sups = match req.cliente.as_str() {
+        "cliente1" => &mut st.supervisoes.cliente1,
+        _          => &mut st.supervisoes.cliente2,
+    };
+
+    // Verificar se este supervisor já está na lista
+    if sups.iter().any(|s| s.supervisor.eq_ignore_ascii_case(&req.supervisor)) {
+        return Json(serde_json::json!({"ok": true, "sessao_id": sessao_id, "server_ip": server_ip}));
     }
 
-    // Registar supervisão
-    let mut st = s.write().await;
-    let nova = Supervisao { supervisor: req.supervisor.clone(), timestamp: now(), ativo: true };
-    match req.cliente.as_str() {
-        "cliente1" => st.supervisoes.cliente1 = nova,
-        _          => st.supervisoes.cliente2 = nova,
-    }
+    sups.push(Supervisao { supervisor: req.supervisor.clone(), timestamp: now() });
     broadcast_estado(&st);
-    println!("[{}] SUPERVISAO INICIADA {} — {} (sessao {})", now(), req.cliente, req.supervisor, sessao_id);
+    println!("[{}] SUPERVISAO INICIADA {} — {} (sessao {}) total={}", now(), req.cliente, req.supervisor, sessao_id, match req.cliente.as_str() { "cliente1" => st.supervisoes.cliente1.len(), _ => st.supervisoes.cliente2.len() });
     Json(serde_json::json!({ "ok": true, "sessao_id": sessao_id, "server_ip": server_ip }))
 }
 
-// POST /supervisao/encerrar — limpa supervisor
-async fn encerrar_supervisao(State(s): State<Shared>, Json(req): Json<EncerrarReq>) -> Json<Value> {
+// POST /supervisao/encerrar — remove supervisor específico da lista
+async fn encerrar_supervisao(State(s): State<Shared>, Json(req): Json<EncerrarSupervisaoReq>) -> Json<Value> {
     let mut st = s.write().await;
-    let supervisor = match req.cliente.as_str() {
-        "cliente1" => { let s = st.supervisoes.cliente1.supervisor.clone(); st.supervisoes.cliente1 = Supervisao::default(); s }
-        "cliente2" => { let s = st.supervisoes.cliente2.supervisor.clone(); st.supervisoes.cliente2 = Supervisao::default(); s }
+    let sups = match req.cliente.as_str() {
+        "cliente1" => &mut st.supervisoes.cliente1,
+        "cliente2" => &mut st.supervisoes.cliente2,
         _          => return Json(serde_json::json!({"ok": false, "erro": "cliente inválido"})),
     };
+    sups.retain(|s| !s.supervisor.eq_ignore_ascii_case(&req.supervisor));
     broadcast_estado(&st);
-    println!("[{}] SUPERVISAO ENCERRADA {} — {}", now(), req.cliente, supervisor);
+    println!("[{}] SUPERVISAO ENCERRADA {} — {}", now(), req.cliente, req.supervisor);
     Json(serde_json::json!({"ok": true}))
 }
 
@@ -698,10 +696,12 @@ async fn auth_login(Json(req): Json<LoginReq>) -> Json<Value> {
     match tokio::task::spawn_blocking(move || verificar_credenciais(&username, &password)).await {
         Ok(Ok(true))  => {
             println!("[{}] Login OK: {}", now(), req.username.trim());
+            log_evento("login", format!("Login bem-sucedido: {}", req.username.trim()));
             Json(serde_json::json!({"ok": true}))
         }
         Ok(Ok(false)) => {
             println!("[{}] Login FALHOU: {}", now(), req.username.trim());
+            log_evento("bloqueio", format!("Login falhado: {} — credenciais inválidas", req.username.trim()));
             Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}))
         }
         _ => Json(serde_json::json!({"ok": false, "erro": "Erro interno"})),
@@ -757,6 +757,12 @@ fn init_db() -> rusqlite::Result<()> {
             username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
             password_hash TEXT NOT NULL,
             criado_em     TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS logs (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo      TEXT NOT NULL,
+            mensagem  TEXT NOT NULL,
+            timestamp TEXT NOT NULL
         );
     ")?;
     Ok(())
@@ -831,6 +837,49 @@ fn remover_operador_db(nome: &str) -> rusqlite::Result<()> {
     let conn = Connection::open(DB_FILE)?;
     conn.execute("DELETE FROM operadores WHERE nome = ?1 COLLATE NOCASE", rusqlite::params![nome])?;
     Ok(())
+}
+
+// ── Logs de auditoria ─────────────────────────────────────────────────────────
+
+fn inserir_log_db(tipo: &str, mensagem: &str) {
+    if let Ok(conn) = Connection::open(DB_FILE) {
+        let _ = conn.execute(
+            "INSERT INTO logs (tipo, mensagem, timestamp) VALUES (?1, ?2, ?3)",
+            rusqlite::params![tipo, mensagem, now()],
+        );
+    }
+}
+
+/// Regista um evento de auditoria de forma assíncrona (fire-and-forget).
+/// Pode ser chamado de qualquer contexto — sync ou async.
+fn log_evento(tipo: impl Into<String>, mensagem: impl Into<String>) {
+    let t = tipo.into();
+    let m = mensagem.into();
+    std::thread::spawn(move || inserir_log_db(&t, &m));
+}
+
+fn ler_logs_db() -> Vec<serde_json::Value> {
+    let conn = match Connection::open(DB_FILE) { Ok(c) => c, Err(_) => return vec![] };
+    let mut stmt = match conn.prepare(
+        "SELECT id, tipo, mensagem, timestamp FROM logs ORDER BY id DESC LIMIT 500"
+    ) { Ok(s) => s, Err(_) => return vec![] };
+    stmt.query_map([], |row| {
+        Ok(serde_json::json!({
+            "id":        row.get::<_, i64>(0)?,
+            "tipo":      row.get::<_, String>(1)?,
+            "mensagem":  row.get::<_, String>(2)?,
+            "timestamp": row.get::<_, String>(3)?,
+        }))
+    })
+    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+    .unwrap_or_default()
+}
+
+async fn get_logs() -> Json<Value> {
+    match tokio::task::spawn_blocking(ler_logs_db).await {
+        Ok(lista) => Json(serde_json::json!(lista)),
+        Err(_)    => Json(serde_json::json!([])),
+    }
 }
 
 // ── RDP ───────────────────────────────────────────────────────────────────────

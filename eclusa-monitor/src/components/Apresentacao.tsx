@@ -1,4 +1,5 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
+import RedeAnalise from "./RedeAnalise";
 
 // ── paleta ────────────────────────────────────────────────────────────────────
 const C = {
@@ -80,7 +81,7 @@ function Aside({ titulo, pontos, pills }: {
 // SISTEMA ACTUAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type TopicActual = "arquitectura" | "falha-rdp";
+type TopicActual = "arquitectura" | "falha-rdp" | "falha-edp";
 
 function TopicHeader({ cor, label, titulo, sub }: { cor: string; label: string; titulo: React.ReactNode; sub: string }) {
   return (
@@ -771,6 +772,7 @@ type TabMain = "actual" | "proposto";
 const TOPICS_ACTUAL: { id: TopicActual; label: string }[] = [
   { id: "arquitectura",  label: "Arquitectura" },
   { id: "falha-rdp",    label: "Falha RDP" },
+  { id: "falha-edp",    label: "Rede & Latência" },
 ];
 
 const TOPICS_PROPOSTO: { id: TopicProposto; label: string }[] = [
@@ -778,6 +780,122 @@ const TOPICS_PROPOSTO: { id: TopicProposto; label: string }[] = [
   { id: "resumo",       label: "Resumo & Ganhos" },
   { id: "simulacao",    label: "Simulação" },
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODO PDF — todos os slides empilhados (um por página)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function ApresentacaoPDF() {
+  const fonts = (
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Kalam:wght@400;700&family=Gloria+Hallelujah&family=Mulish:wght@400;600;700&display=swap"
+    />
+  );
+
+  const bg: React.CSSProperties = {
+    background: C.paper,
+    backgroundImage:
+      "radial-gradient(rgba(0,0,0,.04) 1px, transparent 1px), radial-gradient(rgba(0,0,0,.03) 1px, transparent 1px)",
+    backgroundSize: "24px 24px, 24px 24px",
+    backgroundPosition: "0 0, 12px 12px",
+  };
+
+  function PageBanner({ title, sub, color }: { title: string; sub: string; color: string }) {
+    return (
+      <div style={{
+        background: color, padding: "10px 40px",
+        display: "flex", alignItems: "baseline", gap: 16,
+        borderBottom: `2px solid ${C.ink}`,
+      }}>
+        <div style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, fontSize: 26, color: "white", lineHeight: 1 }}>{title}</div>
+        <div style={{ fontFamily: "'Gloria Hallelujah', cursive", fontSize: 10, color: "rgba(255,255,255,.8)" }}>{sub}</div>
+        <div style={{ marginLeft: "auto", fontFamily: "'Kalam', cursive", fontSize: 11, color: "rgba(255,255,255,.65)" }}>EDP Acessos · Controlo de Sessões RDP</div>
+      </div>
+    );
+  }
+
+  // Slides de arquitectura têm height:calc(100vh-172px) internamente →
+  // reduzimos o banner + padding para que o calc() não ultrapasse 100vh
+  const fixedSlide: React.CSSProperties = {
+    ...bg,
+    height: "100vh",
+    overflow: "hidden",
+    pageBreakAfter: "always",
+    breakAfter: "page",
+    display: "flex",
+    flexDirection: "column",
+    fontFamily: "'Mulish', system-ui, sans-serif",
+    color: C.ink,
+  };
+
+  const scrollSlide: React.CSSProperties = {
+    ...bg,
+    minHeight: "100vh",
+    pageBreakAfter: "always",
+    breakAfter: "page",
+    display: "flex",
+    flexDirection: "column",
+    fontFamily: "'Mulish', system-ui, sans-serif",
+    color: C.ink,
+  };
+
+  return (
+    <div>
+      {fonts}
+
+      {/* ── 1. Sistema Actual — Arquitectura ─────────────────────────── */}
+      <div style={fixedSlide}>
+        <PageBanner title="Sistema Actual — Arquitectura" sub="estado actual · visão geral" color={C.navy} />
+        <div style={{ flex: 1, padding: "12px 40px 12px", overflow: "hidden" }}>
+          <ActualArquitectura />
+        </div>
+      </div>
+
+      {/* ── 2. Sistema Actual — Falha RDP ────────────────────────────── */}
+      <div style={scrollSlide}>
+        <PageBanner title="Sistema Actual — Falha RDP" sub="riscos e diagnóstico" color={C.red} />
+        <div style={{ flex: 1, padding: "20px 40px" }}>
+          <ActualFalhaRDP />
+        </div>
+      </div>
+
+      {/* ── 3. Sistema Actual — Rede & Latência ──────────────────────── */}
+      <div style={scrollSlide}>
+        <PageBanner title="Sistema Actual — Rede & Latência" sub="análise IEC 104 por VLAN" color={C.blue} />
+        <div style={{ flex: 1, padding: "20px 40px" }}>
+          <RedeAnalise />
+        </div>
+      </div>
+
+      {/* ── 4. Sistema Proposto — Arquitectura ───────────────────────── */}
+      <div style={fixedSlide}>
+        <PageBanner title="Sistema Proposto — Arquitectura" sub="EDP Acessos · nova proposta" color={C.green} />
+        <div style={{ flex: 1, padding: "12px 40px 12px", overflow: "hidden" }}>
+          <PropostoArquitectura />
+        </div>
+      </div>
+
+      {/* ── 5. Sistema Proposto — Resumo & Ganhos ────────────────────── */}
+      <div style={scrollSlide}>
+        <PageBanner title="Sistema Proposto — Resumo & Ganhos" sub="antes e depois · comparação completa" color={C.green} />
+        <div style={{ flex: 1, padding: "20px 40px" }}>
+          <PropostoResumo />
+        </div>
+      </div>
+
+      {/* ── 6. Sistema Proposto — Simulação ──────────────────────────── */}
+      <div style={scrollSlide}>
+        <PageBanner title="Sistema Proposto — Simulação" sub="demonstração passo a passo" color={C.navy} />
+        <div style={{ flex: 1, padding: "20px 40px" }}>
+          <PropostoSimulacao />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export default function Apresentacao() {
   const [tab, setTab] = useState<TabMain>("actual");
@@ -860,6 +978,7 @@ export default function Apresentacao() {
       <div style={{ padding: "20px 40px 20px" }}>
         {tab === "actual"   && topicActual === "arquitectura"  && <ActualArquitectura />}
         {tab === "actual"   && topicActual === "falha-rdp"     && <ActualFalhaRDP />}
+        {tab === "actual"   && topicActual === "falha-edp"     && <RedeAnalise />}
 
         {tab === "proposto" && topicProposto === "arquitectura" && <PropostoArquitectura />}
         {tab === "proposto" && topicProposto === "resumo"       && <PropostoResumo />}

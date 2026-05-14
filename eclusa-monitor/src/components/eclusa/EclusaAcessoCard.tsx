@@ -22,7 +22,7 @@ function formatDur(s: number) {
 }
 
 export default function EclusaAcessoCard({
-  nomeEclusa, nomeCliente, sessao, rdp, agora,
+  nomeEclusa, sessao, rdp, agora,
   conectando, onConectar, onEncerrar, utilizadorAtual,
 }: Props) {
   if (nomeEclusa.startsWith("IND")) {

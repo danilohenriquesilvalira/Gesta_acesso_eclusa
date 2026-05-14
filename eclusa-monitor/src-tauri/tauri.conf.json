@@ -14,12 +14,13 @@
       {
         "label": "main",
         "title": "Controlo de Acesso — Eclusas WinCC",
-        "width": 1920,
-        "height": 1080,
+        "width": 2560,
+        "height": 1440,
+        "x": 628,
+        "y": -1440,
         "fullscreen": true,
         "decorations": false,
-        "resizable": false,
-        "center": true
+        "resizable": false
       }
     ],
     "security": {

@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 
-type Pagina = "dashboard" | "admin-usuarios" | "admin-logs" | "apresentacao";
+type Pagina = "dashboard" | "admin-usuarios" | "admin-logs" | "rede";
 
 interface Props {
   utilizador:   string;
@@ -104,23 +104,7 @@ export default function Header({ utilizador, ehAdmin, agora, apiOk, pagina, onPa
             );
           })}
 
-          {/* Botão Apresentação → navega na app */}
-          <button
-            onClick={() => onPagina("apresentacao" as Pagina)}
-            className="flex flex-col items-center justify-center gap-1.5 px-5 h-full text-[13px] font-bold transition-all cursor-pointer"
-            style={{ color: pagina === "apresentacao" ? "#FFFFFF" : "rgba(255,255,255,0.38)" }}
-          >
-            <span className="flex items-center gap-2">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: pagina === "apresentacao" ? 1 : 0.6 }}>
-                <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-              </svg>
-              <span>Apresentação</span>
-            </span>
-            <span
-              className="h-[2px] w-full rounded-full transition-all"
-              style={{ background: pagina === "apresentacao" ? "#FFFFFF" : "transparent" }}
-            />
-          </button>
+
         </nav>
 
         {/* DIREITA */}
