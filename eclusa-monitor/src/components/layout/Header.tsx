@@ -1,11 +1,10 @@
 import { useRef, useState, useEffect } from "react";
 
-type Pagina = "dashboard" | "admin-usuarios" | "admin-logs" | "rede";
+type Pagina = "dashboard" | "admin-usuarios" | "admin-logs" | "admin-blacklist" | "rede";
 
 interface Props {
   utilizador:   string;
-  ehAdmin:      boolean;
-  agora:        Date;
+  isAdmin:      boolean;
   apiOk:        boolean | null;
   pagina:       Pagina;
   onPagina:     (p: Pagina) => void;
@@ -46,11 +45,27 @@ const NAV_ITEMS = [
     ),
     adminOnly: true,
   },
+  {
+    id: "admin-blacklist",
+    label: "Blacklist",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    ),
+    adminOnly: true,
+  },
 ];
 
-export default function Header({ utilizador, ehAdmin, agora, apiOk, pagina, onPagina, onLoginClick, onSair }: Props) {
-  const navItems = NAV_ITEMS.filter(item => !item.adminOnly || ehAdmin);
+export default function Header({ utilizador, isAdmin, apiOk, pagina, onPagina, onLoginClick, onSair }: Props) {
+  const navItems = NAV_ITEMS.filter(item => !item.adminOnly || isAdmin);
   const [dropdownAberto, setDropdownAberto] = useState(false);
+  const [agora, setAgora] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setAgora(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,7 +81,7 @@ export default function Header({ utilizador, ehAdmin, agora, apiOk, pagina, onPa
   return (
     <header
       className="shrink-0 select-none sticky top-0 z-50"
-      style={{ background: "#212E3E", borderBottom: `2px solid ${apiOk ? "#00A651" : apiOk === null ? "rgba(255,255,255,0.07)" : "#E30613"}` }}
+      style={{ background: "#212E3E", borderBottom: `2px solid ${apiOk ? "#28FF52" : apiOk === null ? "rgba(255,255,255,0.07)" : "#E32C2C"}` }}
     >
       <div className="relative flex items-stretch h-[68px] px-8">
 
@@ -133,7 +148,7 @@ export default function Header({ utilizador, ehAdmin, agora, apiOk, pagina, onPa
               >
                 <div
                   className="w-9 h-9 rounded-full flex items-center justify-center font-extrabold text-[14px]"
-                  style={{ background: "#1B2F48", border: "1px solid rgba(255,255,255,0.12)", color: "#FFFFFF" }}
+                  style={{ background: "#212E3E", border: "1px solid rgba(255,255,255,0.12)", color: "#FFFFFF" }}
                 >
                   {utilizador.charAt(0).toUpperCase()}
                 </div>
@@ -150,7 +165,7 @@ export default function Header({ utilizador, ehAdmin, agora, apiOk, pagina, onPa
               {dropdownAberto && (
                 <div
                   className="absolute right-0 top-[calc(100%+6px)] rounded-xl overflow-hidden z-50"
-                  style={{ background: "#1B2F48", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: "160px" }}
+                  style={{ background: "#212E3E", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: "160px" }}
                 >
                   <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                     <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>Sessao ativa</p>
@@ -159,7 +174,7 @@ export default function Header({ utilizador, ehAdmin, agora, apiOk, pagina, onPa
                   <button
                     onClick={() => { setDropdownAberto(false); onSair(); }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-bold transition-all cursor-pointer"
-                    style={{ color: "#E30613" }}
+                    style={{ color: "#E32C2C" }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(227,6,19,0.1)"; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
                   >
@@ -179,13 +194,13 @@ export default function Header({ utilizador, ehAdmin, agora, apiOk, pagina, onPa
               title="Sem utilizador autenticado"
             >
               <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "rgba(227,6,19,0.15)", border: "1px solid rgba(227,6,19,0.4)" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E30613" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E32C2C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                 </svg>
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-[10px] font-bold uppercase tracking-wider leading-none" style={{ color: "rgba(255,255,255,0.3)" }}>Utilizador</span>
-                <span className="text-[12px] font-bold leading-tight mt-0.5" style={{ color: "#E30613" }}>Sem sessao</span>
+                <span className="text-[12px] font-bold leading-tight mt-0.5" style={{ color: "#E32C2C" }}>Sem sessao</span>
               </div>
             </button>
           )}

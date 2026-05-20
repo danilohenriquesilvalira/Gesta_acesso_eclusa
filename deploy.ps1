@@ -1,0 +1,125 @@
+# =============================================================================
+#  deploy.ps1 — Actualiza o servidor de produção com o código local
+#
+#  Uso:  .\deploy.ps1
+#        .\deploy.ps1 -SoBackend    (reconstrói sem copiar ficheiros)
+#        .\deploy.ps1 -VerLogs      (mostra logs do container no final)
+# =============================================================================
+
+param(
+    [switch]$SoBackend,
+    [switch]$VerLogs
+)
+
+# ── Configuração ──────────────────────────────────────────────────────────────
+$SERVIDOR_IP   = "10.45.235.165"
+$SERVIDOR_USER = "rls"
+$SERVIDOR_PASS = "Rls@2024"
+$SERVIDOR_PATH = "/home/rls/next"
+$LOCAL_ROOT    = $PSScriptRoot
+
+$PLINK = "C:\Program Files\PuTTY\plink.exe"
+$PSCP  = "C:\Program Files\PuTTY\pscp.exe"
+
+# =============================================================================
+
+# ── Helpers de output ─────────────────────────────────────────────────────────
+function Passo  { param($msg) Write-Host "`n  >> $msg" -ForegroundColor Cyan }
+function Ok     { param($msg) Write-Host "  OK  $msg" -ForegroundColor Green }
+function Aviso  { param($msg) Write-Host "  !!  $msg" -ForegroundColor Yellow }
+function Falhou { param($msg) Write-Host "`n  ERRO: $msg`n" -ForegroundColor Red; exit 1 }
+
+function Invoke-SSH {
+    param([string]$Cmd)
+    & "$PLINK" -ssh -batch -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" $Cmd
+    if ($LASTEXITCODE -ne 0) { Falhou "Comando SSH falhou: $Cmd" }
+}
+
+function Send-SCP {
+    param([string]$Origem, [string]$Destino)
+    & "$PSCP" -pw $SERVIDOR_PASS -r -batch $Origem "${SERVIDOR_USER}@${SERVIDOR_IP}:${Destino}"
+    if ($LASTEXITCODE -ne 0) { Falhou "Falha ao copiar: $Origem" }
+}
+
+# ── Verificar ferramentas ─────────────────────────────────────────────────────
+if (-not (Test-Path $PLINK)) { Falhou "plink.exe não encontrado em $PLINK" }
+if (-not (Test-Path $PSCP))  { Falhou "pscp.exe não encontrado em $PSCP" }
+
+# ── Cabeçalho ─────────────────────────────────────────────────────────────────
+$inicio = Get-Date
+Write-Host ""
+Write-Host "  ═══════════════════════════════════════════════════════" -ForegroundColor DarkCyan
+Write-Host "   Deploy — Controle de Acesso EDP" -ForegroundColor White
+Write-Host "   Servidor : $SERVIDOR_IP" -ForegroundColor Gray
+Write-Host "   Hora     : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')" -ForegroundColor Gray
+Write-Host "  ═══════════════════════════════════════════════════════" -ForegroundColor DarkCyan
+
+# ── 1. Verificar ligação SSH ──────────────────────────────────────────────────
+Passo "A verificar ligação SSH ao servidor..."
+& "$PLINK" -ssh -batch -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "echo conectado" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Falhou "Não foi possível ligar a ${SERVIDOR_USER}@${SERVIDOR_IP}. Verifica IP e credenciais."
+}
+Ok "Ligação SSH estabelecida"
+
+# ── 2. Copiar ficheiros ───────────────────────────────────────────────────────
+if (-not $SoBackend) {
+
+    Passo "A criar estrutura de pastas no servidor..."
+    Invoke-SSH "mkdir -p $SERVIDOR_PATH/wincc-api/src $SERVIDOR_PATH/infra"
+    Ok "Estrutura verificada"
+
+    Passo "A copiar código fonte Rust (src/)..."
+    Send-SCP "$LOCAL_ROOT\wincc-api\src" "$SERVIDOR_PATH/wincc-api/"
+    Ok "src/ copiado"
+
+    Passo "A copiar Cargo.toml, Cargo.lock, Dockerfile..."
+    Send-SCP "$LOCAL_ROOT\wincc-api\Cargo.toml" "$SERVIDOR_PATH/wincc-api/Cargo.toml"
+    Send-SCP "$LOCAL_ROOT\wincc-api\Cargo.lock" "$SERVIDOR_PATH/wincc-api/Cargo.lock"
+    Send-SCP "$LOCAL_ROOT\wincc-api\Dockerfile"  "$SERVIDOR_PATH/wincc-api/Dockerfile"
+    Ok "Ficheiros de compilação copiados"
+
+    Passo "A copiar docker-compose.yml..."
+    Send-SCP "$LOCAL_ROOT\infra\docker-compose.yml" "$SERVIDOR_PATH/infra/docker-compose.yml"
+    Ok "docker-compose.yml copiado"
+
+} else {
+    Aviso "Modo -SoBackend activo — cópia de ficheiros ignorada"
+}
+
+# ── 3. Rebuild Docker ─────────────────────────────────────────────────────────
+Passo "A reconstruir o backend no servidor (2-4 min)..."
+Invoke-SSH "cd $SERVIDOR_PATH/infra && docker compose up -d --build api"
+Ok "Container reconstruído e em execução"
+
+# ── 4. Limpar imagens antigas ─────────────────────────────────────────────────
+Passo "A limpar imagens Docker obsoletas..."
+Invoke-SSH "docker image prune -f" | Out-Null
+Ok "Limpeza concluída"
+
+# ── 5. Health check ───────────────────────────────────────────────────────────
+Passo "A aguardar arranque do backend (5s)..."
+Start-Sleep -Seconds 5
+$health = & "$PLINK" -ssh -batch -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "curl -sf http://localhost:8080/health && echo ONLINE || echo FALHOU" 2>&1
+if ($health -match "FALHOU" -or $LASTEXITCODE -ne 0) {
+    Aviso "Health check não respondeu — pode ainda estar a compilar"
+    Aviso "Verifica com: .\deploy.ps1 -VerLogs"
+} else {
+    Ok "Backend online: http://${SERVIDOR_IP}:8080/health"
+}
+
+# ── 6. Logs (opcional) ────────────────────────────────────────────────────────
+if ($VerLogs) {
+    Write-Host "`n  ── Últimas 50 linhas de log ───────────────────────────" -ForegroundColor DarkCyan
+    Invoke-SSH "docker compose -f $SERVIDOR_PATH/infra/docker-compose.yml logs --tail=50 api"
+}
+
+# ── Resumo ────────────────────────────────────────────────────────────────────
+$segundos = [math]::Round(((Get-Date) - $inicio).TotalSeconds)
+Write-Host ""
+Write-Host "  ═══════════════════════════════════════════════════════" -ForegroundColor DarkGreen
+Write-Host "   Deploy concluído em ${segundos}s" -ForegroundColor Green
+Write-Host "   API  : http://${SERVIDOR_IP}:8080/health" -ForegroundColor Gray
+Write-Host "   Logs : .\deploy.ps1 -VerLogs" -ForegroundColor Gray
+Write-Host "  ═══════════════════════════════════════════════════════" -ForegroundColor DarkGreen
+Write-Host ""

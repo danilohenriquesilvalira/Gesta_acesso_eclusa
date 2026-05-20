@@ -1,13 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 
 interface Props {
-  isOpen:    boolean;
-  canClose:  boolean;
-  apiUrl:    string;
-  semUsers:  boolean;
-  onLogin:   (username: string) => void;
-  onClose:   () => void;
-  onIrAdmin: () => void;
+  isOpen:   boolean;
+  canClose: boolean;
+  apiUrl:   string;
+  onLogin:  (username: string, token: string, role: string) => void;
+  onClose:  () => void;
 }
 
 const EdpLogoWhite = () => (
@@ -16,7 +14,7 @@ const EdpLogoWhite = () => (
   </svg>
 );
 
-export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogin, onClose, onIrAdmin }: Props) {
+export default function LoginDialog({ isOpen, canClose, apiUrl, onLogin, onClose }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [erro,     setErro]     = useState("");
@@ -34,15 +32,6 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
     e.preventDefault();
     if (!username.trim() || !password) return;
 
-    // ── Acesso dev local (apenas desenvolvimento) ─────────────────────────
-    if (username.trim() === "dev" && password === "1234") {
-      onLogin("dev");
-      onIrAdmin();
-      setUsername(""); setPassword("");
-      return;
-    }
-    // ─────────────────────────────────────────────────────────────────────
-
     setLoading(true);
     setErro("");
     try {
@@ -53,7 +42,7 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
       });
       const data = await r.json();
       if (data.ok) {
-        onLogin(username.trim());
+        onLogin(username.trim(), data.token ?? "", data.role ?? "");
         setUsername(""); setPassword("");
       } else {
         setErro(data.erro ?? "Credenciais inválidas.");
@@ -103,15 +92,15 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ background: "#00A651" }} />
+              <div className="w-2 h-2 rounded-full" style={{ background: "#28FF52" }} />
               <span className="text-white/40 text-[11px] font-medium">Acesso RDP seguro</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ background: "#00A651" }} />
+              <div className="w-2 h-2 rounded-full" style={{ background: "#28FF52" }} />
               <span className="text-white/40 text-[11px] font-medium">Logs de auditoria</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ background: "#00A651" }} />
+              <div className="w-2 h-2 rounded-full" style={{ background: "#28FF52" }} />
               <span className="text-white/40 text-[11px] font-medium">Monitoramento em tempo real</span>
             </div>
           </div>
@@ -119,32 +108,7 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
 
         {/* ── Painel direito — formulário branco ── */}
         <div className="flex-1 bg-white flex flex-col justify-between px-12 py-12">
-          {semUsers ? (
-            <div className="flex flex-col h-full justify-between">
-              <div>
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-[22px] font-extrabold mb-4"
-                  style={{ background: "#fef3c7", color: "#d97706" }}
-                >
-                  !
-                </div>
-                <p className="font-extrabold text-[20px]" style={{ color: "#0f172a" }}>
-                  Sem utilizadores
-                </p>
-                <p className="text-[13px] mt-1.5 leading-relaxed" style={{ color: "#64748b" }}>
-                  Crie o primeiro administrador para começar a usar o sistema de controlo de acesso.
-                </p>
-              </div>
-              <button
-                onClick={onIrAdmin}
-                className="w-full py-3.5 rounded-xl font-extrabold text-[14px] text-white transition-all cursor-pointer"
-                style={{ background: "#212E3E", boxShadow: "0 2px 8px rgba(33,46,62,0.25)" }}
-              >
-                Configurar Sistema
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col h-full justify-center gap-8">
+          <div className="flex flex-col h-full justify-center gap-8">
               <div className="text-center">
                 <p className="font-extrabold text-[24px] leading-none" style={{ color: "#0f172a" }}>
                   Autenticacao
@@ -246,7 +210,6 @@ export default function LoginDialog({ isOpen, canClose, apiUrl, semUsers, onLogi
                 {loading ? "A verificar..." : "Entrar no Sistema"}
               </button>
             </div>
-          )}
         </div>
 
         {/* Botão fechar */}
