@@ -1,399 +1,293 @@
-# Sistema de Monitorização e Controlo de Acesso Remoto — WinCC Industrial
+# Sistema de Gestão de Acesso Remoto — EDP Eclusas
 
-Stack: **Rust + Axum** (API) · **Tauri v2 + React + Tailwind** (app desktop) · **VBScript** (WinCC) · **RustDesk** (acesso remoto)
+Backend **Rust/Axum** · Frontend **Tauri v2 / React / Tailwind** · DB **PostgreSQL 16** · Acesso remoto **Windows Server 2022 nativo (RDP/WTS)**
 
----
-
-## Infraestrutura
-
-| Máquina | Função | IP |
-|---|---|---|
-| Windows Server 2012 #1 | Servidor WinCC + API Rust | 172.29.164.10 |
-| Windows Server 2012 #2 | Cliente WinCC 1 | 172.29.164.54 |
-| Windows Server 2012 #3 | Cliente WinCC 2 | 172.29.164.58 |
-| Mini PCs da régua | App Tauri (2× monitores 1080p) | 172.29.164.x |
-
-Máscara: `255.255.255.192` · Gateway: `172.29.164.1`
+> **Importante:** Este sistema usa exclusivamente as ferramentas nativas do Windows Server 2022 para gestão de sessões RDP:
+> `qwinsta` (listar sessões), `tsdiscon` (desconectar sessão), `mstsc` (abrir cliente RDP), **WTS API** (obter IP do cliente via `WTSQuerySessionInformationW`) e **PowerShell `netsh`/`New-NetFirewallRule`** (firewall). **Não usa RustDesk nem qualquer software de acesso remoto de terceiros.**
 
 ---
 
-## 1. Compilar wincc-api (Rust + Axum)
+## Visão Geral
 
-> Compilar numa máquina com internet e Rust instalado. Copiar o .exe resultante.
+O sistema gere o acesso remoto RDP dos operadores EDP às Estações WinCC que controlam as eclusas do Douro (CL, CM, PN, RG, VR). Garante que apenas um operador por vez acede a cada eclusa, regista toda a actividade em auditoria, permite supervisão view-only em shadow mode, e monitoriza a saúde dos PLCs via TCP.
 
-### Pré-requisitos (máquina de compilação)
-
-```bash
-# Instalar Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Adicionar target para cross-compile a partir de Linux/Mac
-rustup target add x86_64-pc-windows-gnu
-
-# Em Linux: instalar linker mingw
-sudo apt install gcc-mingw-w64-x86-64   # Debian/Ubuntu
+```
+                    ┌─────────────────────────────────────┐
+                    │         Servidor Linux               │
+                    │  ┌─────────────┐  ┌──────────────┐  │
+  Tauri Desktop ───►│  │  Rust API   │  │  PostgreSQL  │  │
+  React Frontend    │  │  Axum 0.7   │──│     16       │  │
+  Browser Dashboard │  └──────┬──────┘  └──────────────┘  │
+                    └─────────┼───────────────────────────┘
+                              │ WinCC API / RDP Commands
+                    ┌─────────▼───────────────────────────┐
+                    │     Windows Server 2022 (VMs)        │
+                    │  cliente1: RG (172.29.164.49)         │
+                    │  cliente2: PN (172.29.164.51)         │
+                    └──────────────────────────────────────┘
 ```
 
-### Compilar
+---
+
+## Stack Técnica
+
+| Componente | Tecnologia |
+|---|---|
+| Backend | Rust 2021 + Axum 0.7 + Tokio |
+| Autenticação | JWT HS256 + Argon2id |
+| Base de dados | PostgreSQL 16 + sqlx 0.8 |
+| Frontend desktop | Tauri v2 + React + TypeScript + Tailwind CSS |
+| Sessões RDP | `qwinsta`, `tsdiscon`, WTS API (Windows Server 2022) |
+| Shadow/supervisão | `mstsc /shadow` + registo de políticas via PowerShell |
+| Firewall | `New-NetFirewallRule` via WMIC remoto |
+| Monitorização PLC | TCP probe na porta 102 (S7 / ISO-on-TCP) |
+| Deploy | Docker Compose (Linux) + `deploy.ps1` (PuTTY, Windows) |
+
+---
+
+## Arranque Rápido
+
+### Pré-requisitos (servidor Linux)
+- Docker + Docker Compose v2
+- Portas: `8080` (API)
+
+### 1. Configurar variáveis de ambiente
+
+```bash
+cp infra/.env.server.example infra/.env.server
+# Editar com os valores reais:
+# POSTGRES_PASSWORD, JWT_SECRET, RDP_PASSWORD
+```
+
+### 2. Subir os serviços
+
+```bash
+cd infra
+docker compose up -d --build
+docker compose logs -f api
+```
+
+### 3. Verificar saúde
+
+```bash
+curl http://localhost:8080/health
+# {"status":"ok","db":true,"plc":false,"timestamp":"..."}
+```
+
+### 4. Bootstrap do admin (primeira vez)
+
+Definir `BOOTSTRAP_ADMIN_PASSWORD` em `.env.server` antes do primeiro arranque.
+O utilizador `admin` é criado automaticamente se não existir nenhum admin activo.
+
+---
+
+## Deploy automático (Windows → Servidor Linux)
+
+```powershell
+# Copia ficheiros + rebuild Docker no servidor
+.\deploy.ps1
+
+# Só rebuild sem copiar ficheiros
+.\deploy.ps1 -SoBackend
+
+# Rebuild + ver logs depois
+.\deploy.ps1 -VerLogs
+```
+
+Usa PuTTY (`plink`/`pscp`) — instalar em `C:\Program Files\PuTTY\`.
+
+---
+
+## Variáveis de Ambiente
+
+| Variável | Obrigatório | Descrição |
+|---|---|---|
+| `DATABASE_URL` | Sim | URL PostgreSQL |
+| `JWT_SECRET` | Sim | Segredo JWT (mínimo 32 chars) |
+| `RDP_PASSWORD` | Sim | Password do utilizador RDP nas VMs |
+| `RDP_USER` | Não | Utilizador RDP (default: `Administrator`) |
+| `API_PORT` | Não | Porta da API (default: `8080`) |
+| `ECLUSAS_FILE` | Não | Caminho do ficheiro de estado das eclusas |
+| `CLIENT1_IP` | Não | IP da VM cliente1/RG (default: `172.29.164.49`) |
+| `CLIENT2_IP` | Não | IP da VM cliente2/PN (default: `172.29.164.51`) |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Não | Cria utilizador admin no primeiro arranque |
+| `RUST_LOG` | Não | Nível de log (ex: `wincc_api=debug`) |
+
+---
+
+## API — Endpoints
+
+### Públicos (sem autenticação)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/health` | Saúde do serviço + DB |
+| POST | `/auth/login` | Autenticação → retorna JWT |
+| POST | `/auth/logout` | Revogação do token JWT |
+| GET | `/eventos` | SSE stream — estado em tempo real |
+
+### Eclusas (sem auth — LAN only, escritos pelo WinCC)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/eclusas` | Estado de todas as eclusas |
+| POST | `/eclusas/:id/estado` | WinCC actualiza estado da eclusa |
+
+### Sessões RDP (requer JWT)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/estado` | Estado global completo |
+| GET | `/sessoes` | Estado das sessões activas |
+| GET | `/sessoes/simples` | Formato texto para VBScript WinCC |
+| GET | `/sessoes/shadow` | IDs/IPs para shadow mode |
+| POST | `/sessoes/iniciar` | Inicia sessão RDP |
+| POST | `/sessoes/encerrar` | Encerra sessão RDP |
+| POST | `/supervisao/iniciar` | Regista supervisor (shadow view-only) |
+| POST | `/supervisao/encerrar` | Remove supervisor |
+
+### Streaming de vídeo (sem auth — LAN only)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| POST | `/stream/:cliente/frame` | WinCC Streamer envia frame JPEG |
+| GET | `/stream/:cliente/mjpeg` | MJPEG multipart para browsers |
+| GET | `/stream/:cliente/ws` | WebSocket binário (Tauri) |
+
+### Administração (requer JWT admin)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET/POST | `/usuarios` | Listar/criar utilizadores |
+| GET/PUT/DELETE | `/usuarios/:username` | Ler/actualizar/eliminar utilizador |
+| GET/DELETE | `/operadores`, `/operadores/:nome` | Gestão de operadores |
+| GET | `/logs` | Últimos 500 eventos de auditoria |
+| GET/POST | `/blacklist` | Listar/adicionar IP bloqueado |
+| DELETE | `/blacklist/:id` | Remover bloqueio de IP |
+| POST | `/admin/force-logout` | Forçar logout de qualquer utilizador |
+
+---
+
+## Arquitectura Interna
+
+### Estado em memória (`AppStateInner`)
+
+Todo o estado mutável vive num `RwLock<AppStateInner>` — reads são concorrentes, writes são curtos:
+
+- `sessoes` — quem está ligado a cada cliente RDP
+- `supervisoes` — lista de supervisores activos por cliente
+- `rdp` — estado actual de cada sessão Windows (qwinsta)
+- `plc_health` — saúde de cada PLC com circuit breaker
+- `eclusas` — estado JSON das eclusas (actualizado pelo WinCC, **sem I/O em runtime**)
+- `operadores` — lista de operadores activos
+
+### Background tasks
+
+| Task | Intervalo | Função |
+|---|---|---|
+| `rdp_poll_loop` | 1500ms | Chama `qwinsta` em cada VM, desconecta sessões não autorizadas |
+| `plc_health_loop` | 1000ms | Probe TCP porta 102 em 5 PLCs, circuit breaker |
+| `failover_monitor_loop` | 2000ms | FSM watching PLC transitions → dispara failover (fase 2) |
+| `cleanup_loop` | 1h | Limpa tokens expirados da DB e cache JTI em memória |
+
+### Autenticação
+
+- **JWT HS256** com JTI único por token (UUID v4)
+- **Argon2id** para hash de passwords (via `spawn_blocking`)
+- **Dupla revogação**: cache in-memory (`revoked_jtis`) + tabela PostgreSQL
+  - Logout explícito → JTI adicionado ao cache e à DB instantaneamente
+  - Próximas requests rejeitadas sem query à DB (cache first)
+- **Force-logout admin** → timestamp threshold invalida todos os tokens anteriores
+
+### Gestão RDP (Windows Server 2022)
+
+```
+Operador pede sessão → POST /sessoes/iniciar
+  ├─ Verifica conta activa no PostgreSQL
+  ├─ Verifica IP não bloqueado
+  ├─ Write lock atómico (check-and-set)
+  ├─ Desbloqueia IP no firewall em background (New-NetFirewallRule via WMIC)
+  └─ Responde <10ms
+
+Poll RDP (cada 1500ms) → qwinsta /server:<ip>
+  ├─ Sessão activa + operador registado → OK
+  ├─ Sessão activa + operador NÃO registado → tsdiscon + bloqueia IP
+  └─ Sem sessão → limpa supervisores, broadcast SSE
+
+Shadow/Supervisão → POST /supervisao/iniciar
+  └─ Devolve sessao_id + server_ip para mstsc /shadow:<id> /server:<ip> /noConsentPrompt
+```
+
+---
+
+## Desenvolvimento
+
+### Compilar localmente
 
 ```bash
 cd wincc-api
+cp .env.example .env
+# Editar .env com DATABASE_URL etc.
 
-# Cross-compile a partir de Linux/Mac
-cargo build --release --target x86_64-pc-windows-gnu
+cargo build                    # debug
+cargo build --release          # release
 
-# OU compilar nativamente em Windows (requer Visual Studio Build Tools)
-cargo build --release
+cargo run --bin seed           # popular DB com utilizadores de teste
 ```
 
-Binário resultante: `target/x86_64-pc-windows-gnu/release/wincc-api.exe`  
-(ou `target/release/wincc-api.exe` se compilado nativamente no Windows)
-
-### Instalar no servidor (172.29.164.10)
-
-1. Copiar `wincc-api.exe` para `C:\wincc-api\wincc-api.exe`
-2. A API cria automaticamente `C:\wincc_state\estado.json` na primeira execução
-3. Executar: `C:\wincc-api\wincc-api.exe`
-
-### Instalar como serviço Windows (opcional)
-
-```powershell
-# Usando NSSM (Non-Sucking Service Manager)
-nssm install WinCCAPI "C:\wincc-api\wincc-api.exe"
-nssm set WinCCAPI Start SERVICE_AUTO_START
-nssm start WinCCAPI
-```
-
-### Testar a API
-
-```powershell
-# Health check
-Invoke-RestMethod http://172.29.164.10:8080/health
-
-# Ver estado
-Invoke-RestMethod http://172.29.164.10:8080/estado
-
-# Marcar cliente1 em uso
-Invoke-RestMethod -Method POST -Uri http://172.29.164.10:8080/estado/cliente1 `
-  -ContentType "application/json" `
-  -Body '{"eclusa":"Eclusa Norte","operador":"Teste","em_operacao":true}'
-
-# Libertar
-Invoke-RestMethod -Method POST -Uri http://172.29.164.10:8080/estado/liberar/cliente1
-```
-
----
-
-## 2. Compilar eclusa-monitor (Tauri v2 + React)
-
-> Compilar numa máquina Windows com internet. Os binários .exe e instaladores resultantes são copiados para os mini PCs.
-
-### Pré-requisitos (máquina de compilação Windows)
-
-```powershell
-# 1. Node.js 20+ — https://nodejs.org
-# 2. Rust + Visual Studio Build Tools
-winget install Rustlang.Rustup
-rustup default stable
-rustup target add x86_64-pc-windows-msvc
-
-# 3. WebView2 Runtime (normalmente já presente no Windows 11/Server 2019+)
-#    Se necessário: https://developer.microsoft.com/microsoft-edge/webview2/
-
-# 4. Dependências Tauri no Windows
-# Visual Studio Build Tools com "Desktop development with C++"
-```
-
-### Instalar dependências e compilar
+### Variáveis de log
 
 ```bash
-cd eclusa-monitor
+# Info (default)
+RUST_LOG=wincc_api=info cargo run
 
-# Instalar dependências npm
-npm install
+# Debug (inclui queries sqlx)
+RUST_LOG=wincc_api=debug,sqlx=debug cargo run
 
-# Compilar app Tauri para Windows
-npm run tauri build
+# Só warnings
+RUST_LOG=warn cargo run
 ```
 
-Instalador resultante: `src-tauri/target/release/bundle/msi/eclusa-monitor_0.1.0_x64_en-US.msi`  
-Executável standalone: `src-tauri/target/release/eclusa-monitor.exe`
-
-### Configuração da API URL
-
-Por padrão a app aponta para `http://172.29.164.10:8080`.
-
-Para sobrepor, criar um ficheiro `config.json` **na mesma pasta** do `eclusa-monitor.exe`:
-
-```json
-{
-  "api_url": "http://172.29.164.10:8080"
-}
-```
-
-### Instalar nos mini PCs
-
-1. Copiar `eclusa-monitor.exe` (ou instalar o .msi) para cada mini PC
-2. Criar `config.json` junto ao .exe se necessário
-3. Configurar para arrancar no início de sessão (opcional):
-   - `Win + R` → `shell:startup` → criar atalho para o .exe
-
-### Múltiplos monitores
-
-A app arranca em fullscreen no monitor primário. Para configurar qual monitor é o primário:  
-`Definições do Windows > Sistema > Monitor > Definir como principal`
-
----
-
-## 3. Instalar e configurar RustDesk self-hosted (offline)
-
-> O RustDesk substitui o RDP padrão da Microsoft por oferecer 60fps+ e melhor qualidade para animações SVG do WinCC.
-
-### Download (numa máquina com internet)
-
-```bash
-# Versão recomendada: RustDesk 1.2.x
-# https://github.com/rustdesk/rustdesk/releases
-
-# Para Windows: rustdesk-<versão>.exe (cliente + servidor incluídos no mesmo instalador)
-# Para servidor relay (hbbr/hbbs): rustdesk-server-windows-x86_64.zip
-```
-
-### Instalar servidor relay no 172.29.164.10
-
-O servidor relay permite ligações internas sem internet — tudo fica dentro da VLAN.
-
-```powershell
-# Extrair rustdesk-server-windows-x86_64.zip para C:\rustdesk-server\
-
-# Iniciar servidor de IDs (hbbs) — porta 21115, 21116, 21118
-C:\rustdesk-server\hbbs.exe
-
-# Iniciar servidor relay (hbbr) — porta 21117
-C:\rustdesk-server\hbbr.exe
-```
-
-Como serviço permanente com NSSM:
-
-```powershell
-nssm install RustDeskHBBS "C:\rustdesk-server\hbbs.exe"
-nssm install RustDeskHBBR "C:\rustdesk-server\hbbr.exe"
-nssm set RustDeskHBBS Start SERVICE_AUTO_START
-nssm set RustDeskHBBR Start SERVICE_AUTO_START
-nssm start RustDeskHBBS
-nssm start RustDeskHBBR
-```
-
-### Configurar clientes WinCC (172.29.164.54 e 172.29.164.58)
-
-1. Instalar `rustdesk.exe` em cada cliente
-2. Abrir RustDesk > Configurações > Rede > Servidor ID/Relay:
-   - ID Server: `172.29.164.10`
-   - Relay Server: `172.29.164.10`
-   - API Server: (deixar vazio)
-3. Ativar acesso não supervisionado: definir password estática em Configurações > Segurança
-
-### Configurar mini PCs da régua
-
-1. Instalar `rustdesk.exe` em cada mini PC
-2. Configurar servidor igual ao passo anterior
-3. Testar ligação manual: RustDesk > inserir ID do cliente > Conectar
-
-### Comando usado pela app Tauri
-
-```bash
-rustdesk --connect 172.29.164.54
-rustdesk --connect 172.29.164.58
-```
-
-A app tenta automaticamente `rustdesk` no PATH e depois `C:\Program Files\RustDesk\rustdesk.exe`.
-
-### Portas a abrir no firewall (interno)
+### Estrutura do projecto
 
 ```
-TCP/UDP 21115  — hbbs (negociação NAT)
-TCP/UDP 21116  — hbbs (registo IDs)
-TCP     21117  — hbbr (relay de dados)
-TCP     21118  — hbbs (WebSocket)
-TCP     21119  — hbbr (WebSocket)
-```
-
-```powershell
-# Abrir portas no Windows Firewall do servidor 172.29.164.10
-New-NetFirewallRule -DisplayName "RustDesk" -Direction Inbound `
-  -Protocol TCP -LocalPort 21115,21116,21117,21118,21119 -Action Allow
-New-NetFirewallRule -DisplayName "RustDesk UDP" -Direction Inbound `
-  -Protocol UDP -LocalPort 21115,21116 -Action Allow
-
-# Abrir porta da API
-New-NetFirewallRule -DisplayName "WinCC API" -Direction Inbound `
-  -Protocol TCP -LocalPort 8080 -Action Allow
+wincc-api/
+  src/
+    main.rs           # entrypoint, router, middleware, graceful shutdown
+    config.rs         # variáveis de ambiente, constantes de timing
+    types.rs          # structs de domínio (Sessao, RdpInfo, PlcHealth, ...)
+    state.rs          # AppState, AppStateInner, Shared
+    auth.rs           # JWT, Argon2id, extractors AuthUser/AdminUser
+    handlers/
+      eclusas.rs      # GET/POST estado eclusas (memória + persist. disco)
+      sessions.rs     # SSE, GET estado, iniciar/encerrar sessão RDP
+      supervisao.rs   # shadow mode — listar/iniciar/encerrar supervisores
+      users.rs        # auth login/logout, CRUD utilizadores, blacklist, force-logout
+      misc.rs         # health, operadores, logs de auditoria
+      stream.rs       # MJPEG multipart + WebSocket binário
+    db/
+      mod.rs          # pool, schema verify, bootstrap admin, cleanup_loop
+      audit.rs        # log_evento, log_evento_com_ip, log_evento_bg
+    rdp/
+      mod.rs          # rdp_poll_loop, broadcast_estado, disconnect_unauthorized
+      verify.rs       # qwinsta parse, WTSQuerySessionInformation (WTS API)
+      firewall.rs     # New-NetFirewallRule via WMIC remoto
+    plc/
+      mod.rs          # plc_health_loop, circuit breaker
+      health.rs       # CircuitBreaker (AtomicU32)
+      connection.rs   # TCP probe porta 102
+    failover/
+      mod.rs          # FSM failover_monitor_loop
+      orchestrator.rs # trigger_failover / revert_failover (fase 2 — TODO)
+  bin/
+    seed.rs           # ferramenta de desenvolvimento — cria utilizadores teste
 ```
 
 ---
 
-## 4. Configurar scripts no WinCC Explorer 7.5
+## Notas de Segurança
 
-### Passo 1 — Abrir Global Scripts
-
-WinCC Explorer > duplo clique em **Global Scripts** > separador **VBS Actions**
-
-### Passo 2 — Configurar atualizar_estado.vbs
-
-1. Clicar com botão direito na área de scripts > **New**
-2. Nome: `Atualizar_Estado_API`
-3. Copiar conteúdo de `wincc-scripts/atualizar_estado.vbs`
-4. **Adaptar as constantes no início do script:**
-   - `CLIENTE_ID`: `"cliente1"` na máquina 172.29.164.54, `"cliente2"` na 172.29.164.58
-   - `TAG_ECLUSA_NOME`: nome real da tag WinCC com o nome da eclusa activa
-   - `TAG_EM_OPERACAO`: nome real da tag booleana de operação activa
-5. **Definir trigger**: botão direito na action > Properties > Trigger > **Timer**
-   - Intervalo: `5000 ms`
-
-### Passo 3 — Configurar liberar_eclusa.vbs
-
-1. Criar nova action: `Liberar_Eclusa_API`
-2. Copiar conteúdo de `wincc-scripts/liberar_eclusa.vbs`
-3. Adaptar `CLIENTE_ID` conforme a máquina
-4. **Associar a um evento** (escolher uma opção):
-   - **Botão no ecrã WinCC**: criar botão > evento "Mouse Click Up" > chamar esta action
-   - **Runtime Stop**: Global Scripts > Events > Runtime Stop > chamar esta action
-   - **Ambos** (recomendado): garante libertação mesmo em shutdown inesperado
-
-### Passo 4 — Testar os scripts
-
-1. Abrir WinCC Runtime
-2. No Script Diagnostics (View > Script Diagnostics): verificar se aparecem erros
-3. Verificar na API: `Invoke-RestMethod http://172.29.164.10:8080/estado`
-4. O estado deve atualizar com o nome do operador e eclusa a cada 5 segundos
-
-### Notas sobre USERNAME no WinCC
-
-- `Environ("USERNAME")` retorna o utilizador Windows da sessão onde o WinCC Runtime corre
-- Em sessão RDP: retorna o utilizador RDP autenticado — **este é o comportamento correto**
-- Em sessão local: retorna o utilizador local
-- Se o WinCC corre como serviço Windows: retorna o utilizador do serviço (SYSTEM ou configurado) — neste caso usar o **Método 2 (WMI)** ou o **Método 3 (tag WinCC)** descritos no script
-
----
-
-## 5. Distribuição de ficheiros nas máquinas
-
-### 172.29.164.10 — Servidor WinCC
-
-```
-C:\wincc-api\
-    wincc-api.exe           ← API Rust (arrancar como serviço)
-
-C:\rustdesk-server\
-    hbbs.exe                ← Servidor de IDs RustDesk
-    hbbr.exe                ← Servidor relay RustDesk
-
-C:\wincc_state\
-    estado.json             ← Criado automaticamente pela API
-```
-
-### 172.29.164.54 e 172.29.164.58 — Clientes WinCC
-
-```
-C:\Program Files\RustDesk\
-    rustdesk.exe            ← Cliente RustDesk (acesso não supervisionado ativo)
-
-WinCC Global Scripts:
-    Atualizar_Estado_API    ← Timer 5s
-    Liberar_Eclusa_API      ← Evento botão + Runtime Stop
-```
-
-### Mini PCs da régua
-
-```
-C:\eclusa-monitor\
-    eclusa-monitor.exe      ← App Tauri (fullscreen)
-    config.json             ← Opcional, se API URL diferente do padrão
-
-C:\Program Files\RustDesk\
-    rustdesk.exe            ← Para abrir sessões nos clientes
-```
-
----
-
-## 6. Testar o sistema completo
-
-### Sequência de teste
-
-1. **Verificar API**: `Invoke-RestMethod http://172.29.164.10:8080/health`
-   - Resposta esperada: `{"status":"ok","timestamp":"..."}`
-
-2. **Verificar estado inicial**: `Invoke-RestMethod http://172.29.164.10:8080/estado`
-   - Ambos os clientes devem aparecer como `LIVRE`
-
-3. **Testar app Tauri** (num mini PC):
-   - Abrir `eclusa-monitor.exe`
-   - Deve aparecer os dois painéis em verde "LIVRE"
-   - Status bar em baixo deve mostrar "Ligado"
-
-4. **Testar fluxo de conexão**:
-   - Clicar "Conectar" no painel do Cliente WinCC 1
-   - Inserir nome do operador → clicar "Conectar"
-   - O painel deve ficar vermelho "EM USO" com o nome do operador
-   - O RustDesk deve abrir automaticamente com sessão para 172.29.164.54
-   - Verificar no outro mini PC: o painel 1 deve estar cinzento/desabilitado
-
-5. **Testar scripts WinCC**:
-   - Iniciar WinCC Runtime no cliente correspondente
-   - Após 5 segundos, o campo "eclusa" deve atualizar com o valor da tag
-   - O timer de sessão na app Tauri deve estar a contar
-
-6. **Testar libertação**:
-   - Clicar "Encerrar Sessão" na app Tauri
-   - O painel deve voltar a verde "LIVRE"
-   - Verificar via API: `eclusa` deve ser `"LIVRE"`, `operador` deve ser `""`
-
-### Diagnóstico de problemas comuns
-
-| Sintoma | Causa provável | Solução |
-|---|---|---|
-| App Tauri mostra "Sem ligação" | API não está a correr | Iniciar `wincc-api.exe` no 172.29.164.10 |
-| Botão "Conectar" não abre RustDesk | RustDesk não está no PATH | Instalar RustDesk ou verificar caminho em `lib.rs` |
-| Estado não atualiza do WinCC | Script VBS com erro | Ver Script Diagnostics no WinCC; verificar nome das tags |
-| Timeout na API do WinCC | Firewall bloqueando porta 8080 | Adicionar regra de firewall no 172.29.164.10 |
-| RustDesk não conecta | hbbs/hbbr não estão a correr | Iniciar serviços no 172.29.164.10 |
-| USERNAME retorna "SYSTEM" | WinCC corre como serviço | Usar Método 2 (WMI) no script VBS |
-
----
-
-## Estrutura do repositório
-
-```
-Controle_Acesso/
-├── wincc-api/              ← API Rust + Axum
-│   ├── Cargo.toml
-│   └── src/main.rs
-│
-├── eclusa-monitor/         ← App Tauri v2 + React
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── index.html
-│   ├── tailwind.config.js
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── index.css
-│   │   ├── main.tsx
-│   │   └── components/
-│   │       ├── ClientePanel.tsx
-│   │       ├── ConectarModal.tsx
-│   │       └── StatusBar.tsx
-│   └── src-tauri/
-│       ├── Cargo.toml
-│       ├── build.rs
-│       ├── tauri.conf.json
-│       ├── capabilities/default.json
-│       └── src/
-│           ├── main.rs
-│           └── lib.rs
-│
-├── wincc-scripts/          ← VBScript para WinCC Explorer 7.5
-│   ├── atualizar_estado.vbs
-│   └── liberar_eclusa.vbs
-│
-└── README.md
-```
+- Endpoints `/eclusas`, `/stream`, `/sessoes/simples`, `/sessoes/shadow` não têm autenticação — devem estar acessíveis apenas na VLAN interna (firewall de rede)
+- Passwords de RDP passam em variáveis de ambiente — nunca commitar `.env.server`
+- `JWT_SECRET` deve ter pelo menos 32 caracteres aleatórios
+- O ficheiro `infra/.env.server` está no `.gitignore`

@@ -1,20 +1,22 @@
-import type { Eclusa, Supervisao } from "../../App";
+import type { Eclusa, Supervisao } from "../../types";
 
 interface Props {
-  nome: string;
-  eclusa: Eclusa | undefined;
-  ehAdmin: boolean;
-  sessaoAtiva: boolean;
-  emSupervisao: boolean;
+  nome:              string;
+  eclusa:            Eclusa | undefined;
+  ehAdmin:           boolean;
+  backendOnline:     boolean;
+  servidorAcessivel: boolean;
+  sessaoAtiva:       boolean;
+  emSupervisao:      boolean;
   supervisoesAtivas: Supervisao[];
-  utilizadorAtual: string;
-  onSupervisao: () => void;
-  onSairSupervisao: () => void;
+  utilizadorAtual:   string;
+  onSupervisao:      () => void;
+  onSairSupervisao:  () => void;
 }
 
 export default function EclusaMonitorCard({
-  nome, eclusa, ehAdmin, sessaoAtiva, emSupervisao, supervisoesAtivas,
-  utilizadorAtual, onSupervisao, onSairSupervisao,
+  nome, eclusa, ehAdmin, backendOnline, servidorAcessivel, sessaoAtiva, emSupervisao,
+  supervisoesAtivas, utilizadorAtual, onSupervisao, onSairSupervisao,
 }: Props) {
   if (nome.startsWith("IND")) {
     return (
@@ -32,34 +34,46 @@ export default function EclusaMonitorCard({
     );
   }
 
-  const emOperacao = sessaoAtiva;
-  const euSuperviso = emSupervisao;
+  const euSuperviso  = emSupervisao;
   const outrosSuperv = supervisoesAtivas.filter(s => s.supervisor.toLowerCase() !== utilizadorAtual.toLowerCase());
   const hasAnySuperv = supervisoesAtivas.length > 0;
 
-  // Cor: azul se eu supervisiono, vermelho se outros supervisionam (e eu não), verde se livre
-  const accentColor = euSuperviso ? "#3b82f6" : hasAnySuperv ? "#E30613" : "#00A651";
-  const statusLabel = euSuperviso ? "Em Supervisão" : hasAnySuperv ? `Supervisão (${supervisoesAtivas.length})` : "Livre";
+  const inacessivel = !servidorAcessivel;
 
   const isWhite = nome === "RG" || nome === "PN";
+
+  // EDP palette: Electric Green em fundo escuro, Seaweed em fundo branco
+  const accentColor = !backendOnline ? "#7C9599"
+    : inacessivel  ? "#7C9599"
+    : euSuperviso  ? "#263CC8"
+    : hasAnySuperv ? "#E32C2C"
+    : isWhite ? "#225E66" : "#28FF52";
+
+  const statusLabel = !backendOnline ? "Sem Ligação"
+    : inacessivel  ? "Inacessível"
+    : euSuperviso  ? "Em Supervisão"
+    : hasAnySuperv ? `Supervisão (${supervisoesAtivas.length})`
+    : "Livre";
 
   return (
     <div
       className={`flex flex-col h-full rounded-2xl overflow-hidden ${isWhite ? "bg-white shadow-sm" : "card-dark"}`}
-      style={{ 
-        background: isWhite ? "#FFFFFF" : "#1B2F48", 
-        border: isWhite ? "1px solid rgba(0,0,0,0.05)" : "1px solid rgba(255,255,255,0.07)", 
-        borderLeftWidth: 4, 
-        borderLeftColor: accentColor 
+      style={{
+        background: isWhite ? "#FFFFFF" : "#212E3E",
+        border: isWhite ? "1px solid rgba(0,0,0,0.05)" : "1px solid rgba(255,255,255,0.07)",
+        borderLeftWidth: 4,
+        borderLeftColor: accentColor,
       }}
     >
       <div className="flex items-start justify-between px-6 pt-6 pb-4">
         <div>
-          <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/35"}`}>Supervisão</p>
-          <p className={`text-[32px] font-black leading-none mt-1 ${isWhite ? "text-[#1B2F48]" : "text-white"}`}>{nome}</p>
+          <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${isWhite ? "text-[#212E3E]/40" : "text-white/35"}`}>Supervisão</p>
+          <p className={`text-[32px] font-black leading-none mt-1 ${isWhite ? "text-[#212E3E]" : "text-white"}`}>{nome}</p>
         </div>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold mt-0.5 ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.07]"}`}
-          style={{ color: accentColor }}>
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold mt-0.5 ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.07]"}`}
+          style={{ color: accentColor }}
+        >
           <span className="w-2 h-2 rounded-full" style={{ background: accentColor, animation: (euSuperviso || hasAnySuperv) ? "pulse 1.5s infinite" : "none" }} />
           {statusLabel}
         </div>
@@ -68,83 +82,70 @@ export default function EclusaMonitorCard({
       <div className="mx-6" style={{ height: 1, background: isWhite ? "rgba(27,47,72,0.06)" : "rgba(255,255,255,0.06)" }} />
 
       <div className="flex-1 px-6 py-6 flex flex-col justify-center gap-5">
-        {euSuperviso ? (
+        {!backendOnline ? (
+          <p className={`text-[12px] font-bold text-center py-4 ${isWhite ? "text-slate-400" : "text-white/25"}`}>Sem ligação ao servidor</p>
+        ) : inacessivel ? (
+          <p className={`text-[12px] font-bold text-center py-4 ${isWhite ? "text-slate-400" : "text-white/25"}`}>Servidor RDP inacessível</p>
+        ) : euSuperviso ? (
           <div className="flex flex-col gap-4">
             <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-blue-50 border border-blue-100" : "bg-blue-500/10 border border-blue-500/20"}`}>
               <p className={`text-[10px] font-bold uppercase tracking-wide ${isWhite ? "text-blue-600" : "text-blue-400"}`}>A supervisionar</p>
-              <p className={`font-black mt-1 ${isWhite ? "text-[18px] text-[#1B2F48]" : "text-[13px] text-white"}`}>{utilizadorAtual}</p>
+              <p className={`font-black mt-1 ${isWhite ? "text-[18px] text-[#212E3E]" : "text-[13px] text-white"}`}>{utilizadorAtual}</p>
             </div>
             {outrosSuperv.length > 0 && (
               <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.05] border border-white/10"}`}>
                 <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${isWhite ? "text-slate-500" : "text-white/40"}`}>Também a supervisionar</p>
-                <div className="flex flex-col gap-1">
-                  {outrosSuperv.map((s, i) => (
-                    <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#1B2F48]" : "text-white/80"}`}>• {s.supervisor}</p>
-                  ))}
-                </div>
-              </div>
-            )}
-            {eclusa?.modo && (
-              <div className="flex items-center gap-4">
-                <div className={`p-2 rounded-xl ${isWhite ? "bg-slate-50" : "bg-white/[0.05]"}`}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#1B2F48]" : "text-white/40"}>
-                    <path d="M20 7h-9m3 3H2s1 1 2 1h16a3 3 0 0 0 2-3zM4 17h9m-3-3h12s-1-1-2-1H4a3 3 0 0 0-2 3z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/35"}`}>Modo Operacional</p>
-                  <p className={`font-black ${isWhite ? "text-[16px] text-[#1B2F48]" : "text-[13px] text-white"}`}>{eclusa.modo}</p>
-                </div>
+                {outrosSuperv.map((s, i) => (
+                  <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#212E3E]" : "text-white/80"}`}>• {s.supervisor}</p>
+                ))}
               </div>
             )}
           </div>
         ) : hasAnySuperv ? (
           <div className={`px-4 py-4 rounded-xl ${isWhite ? "bg-red-50 border border-red-100" : "bg-red-500/10 border border-red-500/20"}`}>
             <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${isWhite ? "text-red-600" : "text-red-400"}`}>Supervisão Ativa</p>
-            <div className="flex flex-col gap-1">
-              {supervisoesAtivas.map((s, i) => (
-                <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#1B2F48]" : "text-white/80"}`}>• {s.supervisor}</p>
-              ))}
-            </div>
+            {supervisoesAtivas.map((s, i) => (
+              <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#212E3E]" : "text-white/80"}`}>• {s.supervisor}</p>
+            ))}
           </div>
         ) : eclusa ? (
           <div className="flex flex-col gap-4">
             {eclusa.modo && (
               <div className="flex items-center gap-4">
                 <div className={`p-2 rounded-xl ${isWhite ? "bg-slate-50" : "bg-white/[0.05]"}`}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#1B2F48]" : "text-white/40"}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#212E3E]" : "text-white/40"}>
                     <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                   </svg>
                 </div>
                 <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/35"}`}>Modo Atual</p>
-                  <p className={`font-black font-mono ${isWhite ? "text-[18px] text-[#1B2F48]" : "text-[14px] text-white"}`}>{eclusa.modo}</p>
+                  <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#212E3E]/40" : "text-white/35"}`}>Modo Atual</p>
+                  <p className={`font-black font-mono ${isWhite ? "text-[18px] text-[#212E3E]" : "text-[14px] text-white"}`}>{eclusa.modo}</p>
                 </div>
               </div>
             )}
             {eclusa.posto && (
               <div className="flex items-center gap-4">
                 <div className={`p-2 rounded-xl ${isWhite ? "bg-slate-50" : "bg-white/[0.05]"}`}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#1B2F48]" : "text-white/40"}>
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#212E3E]" : "text-white/40"}>
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
                   </svg>
                 </div>
                 <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/35"}`}>Posto Local</p>
-                  <p className={`font-black ${isWhite ? "text-[16px] text-[#1B2F48]" : "text-[13px] text-white"}`}>{eclusa.posto}</p>
+                  <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#212E3E]/40" : "text-white/35"}`}>Posto Local</p>
+                  <p className={`font-black ${isWhite ? "text-[16px] text-[#212E3E]" : "text-[13px] text-white"}`}>{eclusa.posto}</p>
                 </div>
               </div>
             )}
             {eclusa.usuario && (
               <div className="flex items-center gap-4">
                 <div className={`p-2 rounded-xl ${isWhite ? "bg-slate-50" : "bg-white/[0.05]"}`}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#1B2F48]" : "text-white/40"}>
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#212E3E]" : "text-white/40"}>
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                   </svg>
                 </div>
                 <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/35"}`}>Operador WinCC</p>
-                  <p className={`font-black ${isWhite ? "text-[16px] text-[#1B2F48]" : "text-[13px] text-white"}`}>{eclusa.usuario}</p>
+                  <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#212E3E]/40" : "text-white/35"}`}>Operador WinCC</p>
+                  <p className={`font-black ${isWhite ? "text-[16px] text-[#212E3E]" : "text-[13px] text-white"}`}>{eclusa.usuario}</p>
                 </div>
               </div>
             )}
@@ -156,9 +157,10 @@ export default function EclusaMonitorCard({
 
       <div style={{ height: 1, background: isWhite ? "rgba(27,47,72,0.06)" : "rgba(255,255,255,0.06)", margin: "0 24px" }} />
 
-      {/* Botão supervisão */}
       <div className="px-4 py-3">
-        {ehAdmin && emOperacao ? (
+        {!backendOnline || inacessivel ? (
+          <div style={{ height: 38 }} />
+        ) : ehAdmin && sessaoAtiva ? (
           euSuperviso ? (
             <button
               onClick={onSairSupervisao}
@@ -172,29 +174,19 @@ export default function EclusaMonitorCard({
           ) : (
             <button
               onClick={onSupervisao}
-              className={`w-full py-2.5 rounded-xl font-bold text-[12px] transition-all cursor-pointer shadow-sm ${isWhite ? "text-white" : ""}`}
-              style={{ 
-                background: isWhite ? "#1B2F48" : "rgba(255,255,255,0.05)",
-                border: isWhite ? "none" : "1px solid rgba(255,255,255,0.15)", 
-                color: isWhite ? "#FFFFFF" : "rgba(255,255,255,0.7)" 
+              className="w-full py-2.5 rounded-xl font-bold text-[12px] transition-all cursor-pointer shadow-sm"
+              style={{
+                background: isWhite ? "#212E3E" : "rgba(255,255,255,0.05)",
+                border: isWhite ? "none" : "1px solid rgba(255,255,255,0.15)",
+                color: isWhite ? "#FFFFFF" : "rgba(255,255,255,0.7)",
               }}
-              onMouseEnter={e => { 
-                if (isWhite) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "#253e5d";
-                } else {
-                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.1)"; 
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(59,130,246,0.2)"; 
-                  (e.currentTarget as HTMLButtonElement).style.color = "#3b82f6"; 
-                }
+              onMouseEnter={e => {
+                if (isWhite) { (e.currentTarget as HTMLButtonElement).style.background = "#253e5d"; }
+                else { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(59,130,246,0.2)"; (e.currentTarget as HTMLButtonElement).style.color = "#263CC8"; }
               }}
-              onMouseLeave={e => { 
-                if (isWhite) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "#1B2F48";
-                } else {
-                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; 
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.15)"; 
-                  (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
-                }
+              onMouseLeave={e => {
+                if (isWhite) { (e.currentTarget as HTMLButtonElement).style.background = "#212E3E"; }
+                else { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.15)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)"; }
               }}
             >
               Iniciar Supervisão

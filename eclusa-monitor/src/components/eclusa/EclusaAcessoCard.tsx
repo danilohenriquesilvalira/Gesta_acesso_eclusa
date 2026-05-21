@@ -1,16 +1,17 @@
-import { useMemo } from "react";
-import type { Sessao, RdpInfo } from "../../App";
+import { useState, useEffect, useMemo } from "react";
+import type { Sessao, RdpInfo } from "../../types";
 
 interface Props {
-  nomeEclusa: string;
-  nomeCliente: string;
-  sessao: Sessao;
-  rdp: RdpInfo;
-  agora: Date;
-  conectando: boolean;
-  ehAdmin: boolean;
-  onConectar: () => void;
-  onEncerrar: () => void;
+  nomeEclusa:      string;
+  nomeCliente:     string;
+  sessao:          Sessao;
+  rdp:             RdpInfo;
+  conectando:      boolean;
+  ehAdmin:         boolean;
+  backendOnline:   boolean;
+  onConectar:      () => void;
+  onEncerrar:      () => void;
+  onForcarEncerrar?: () => void;
   utilizadorAtual: string;
 }
 
@@ -22,9 +23,16 @@ function formatDur(s: number) {
 }
 
 export default function EclusaAcessoCard({
-  nomeEclusa, sessao, rdp, agora,
-  conectando, onConectar, onEncerrar, utilizadorAtual,
+  nomeEclusa, sessao, rdp,
+  conectando, ehAdmin, backendOnline, onConectar, onEncerrar, onForcarEncerrar, utilizadorAtual,
 }: Props) {
+  // Clock local — só corre quando há sessão activa, não polui o App inteiro
+  const [agora, setAgora] = useState(new Date());
+  useEffect(() => {
+    if (!rdp.ocupado) return;
+    const t = setInterval(() => setAgora(new Date()), 1000);
+    return () => clearInterval(t);
+  }, [rdp.ocupado]);
   if (nomeEclusa.startsWith("IND")) {
     return (
       <div
@@ -41,13 +49,25 @@ export default function EclusaAcessoCard({
     );
   }
 
-  const livre = !rdp.ocupado && !rdp.nao_autorizado;
-  const naoAutor = rdp.nao_autorizado;
+  const inacessivel = !rdp.verificado;
+  const livre    = !inacessivel && !rdp.ocupado && !rdp.nao_autorizado;
+  const naoAutor = !inacessivel && rdp.nao_autorizado;
   const operador = sessao.operador || (rdp.ocupado ? rdp.utilizador : "") || "";
-  const ehMinha = sessao.conectado && sessao.operador.toLowerCase() === utilizadorAtual.toLowerCase();
+  const ehMinha  = sessao.conectado && sessao.operador.toLowerCase() === utilizadorAtual.toLowerCase();
 
-  const accentColor = naoAutor ? "#f59e0b" : rdp.ocupado ? "#E30613" : "#00A651";
-  const statusLabel = naoAutor ? "Não Autorizado" : rdp.ocupado ? "Em Uso" : "Disponível";
+  const isWhite = nomeEclusa === "RG" || nomeEclusa === "PN";
+
+  // EDP palette: Electric Green (#28FF52) em fundo escuro, Seaweed (#225E66) em fundo branco
+  const accentColor = !backendOnline ? "#7C9599"
+    : inacessivel ? "#7C9599"
+    : naoAutor ? "#F7D200"
+    : rdp.ocupado ? "#E32C2C"
+    : isWhite ? "#225E66" : "#28FF52";
+  const statusLabel = !backendOnline ? "Sem Ligação"
+    : inacessivel ? "Inacessível"
+    : naoAutor ? "Não Autorizado"
+    : rdp.ocupado ? "Em Uso"
+    : "Disponível";
 
   const tempo = useMemo(() => {
     if (!rdp.ocupado || !sessao.timestamp_inicio) return null;
@@ -56,13 +76,11 @@ export default function EclusaAcessoCard({
     return formatDur(Math.max(0, Math.floor((agora.getTime() - d.getTime()) / 1000)));
   }, [sessao.timestamp_inicio, agora, rdp.ocupado]);
 
-  const isWhite = nomeEclusa === "RG" || nomeEclusa === "PN";
-
   return (
     <div
       className={`flex flex-col h-full rounded-2xl overflow-hidden ${isWhite ? "bg-white shadow-sm" : "card-dark"}`}
       style={{ 
-        background: isWhite ? "#FFFFFF" : "#1B2F48", 
+        background: isWhite ? "#FFFFFF" : "#212E3E", 
         border: isWhite ? "1px solid rgba(0,0,0,0.05)" : "1px solid rgba(255,255,255,0.07)", 
         borderLeftWidth: 4, 
         borderLeftColor: accentColor 
@@ -71,8 +89,8 @@ export default function EclusaAcessoCard({
       {/* Cabeçalho */}
       <div className="flex items-start justify-between px-6 pt-6 pb-4">
         <div>
-          <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/40"}`}>Controle de Acesso</p>
-          <p className={`text-[32px] font-black leading-none mt-1 ${isWhite ? "text-[#1B2F48]" : "text-white"}`}>{nomeEclusa}</p>
+          <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${isWhite ? "text-[#212E3E]/40" : "text-white/40"}`}>Controle de Acesso</p>
+          <p className={`text-[32px] font-black leading-none mt-1 ${isWhite ? "text-[#212E3E]" : "text-white"}`}>{nomeEclusa}</p>
         </div>
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold mt-0.5 ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.07]"}`}
           style={{ color: accentColor }}>
@@ -87,13 +105,13 @@ export default function EclusaAcessoCard({
       <div className="flex-1 px-6 py-6 flex flex-col justify-center gap-6">
         <div className="flex items-center gap-4 group">
           <div className={`p-3 rounded-2xl transition-all ${isWhite ? "bg-slate-50 group-hover:bg-slate-100" : "bg-white/[0.05]"}`}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#1B2F48]" : "text-white/40"}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#212E3E]" : "text-white/40"}>
               <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
             </svg>
           </div>
           <div>
-            <p className={`text-[11px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/40"}`}>Operador Atual</p>
-            <p className={`font-black leading-tight ${isWhite ? "text-[20px] text-[#1B2F48]" : "text-[15px] text-white"}`}>{operador || "SISTEMA LIVRE"}</p>
+            <p className={`text-[11px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#212E3E]/40" : "text-white/40"}`}>Operador Atual</p>
+            <p className={`font-black leading-tight ${isWhite ? "text-[20px] text-[#212E3E]" : "text-[15px] text-white"}`}>{operador || (inacessivel ? "—" : "SISTEMA LIVRE")}</p>
           </div>
         </div>
 
@@ -102,13 +120,13 @@ export default function EclusaAcessoCard({
         {tempo && (
           <div className="flex items-center gap-4 group">
             <div className={`p-3 rounded-2xl transition-all ${isWhite ? "bg-slate-50 group-hover:bg-slate-100" : "bg-white/[0.05]"}`}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#1B2F48]" : "text-white/40"}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isWhite ? "text-[#212E3E]" : "text-white/40"}>
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
               </svg>
             </div>
             <div>
-              <p className={`text-[11px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#1B2F48]/40" : "text-white/40"}`}>Tempo de Sessão</p>
-              <p className={`font-black font-mono tabular-nums leading-tight ${isWhite ? "text-[28px] text-[#1B2F48]" : "text-[20px] text-white"}`}>{tempo}</p>
+              <p className={`text-[11px] font-bold uppercase tracking-[0.15em] ${isWhite ? "text-[#212E3E]/40" : "text-white/40"}`}>Tempo de Sessão</p>
+              <p className={`font-black font-mono tabular-nums leading-tight ${isWhite ? "text-[28px] text-[#212E3E]" : "text-[20px] text-white"}`}>{tempo}</p>
             </div>
           </div>
         )}
@@ -125,12 +143,20 @@ export default function EclusaAcessoCard({
 
       {/* Botões */}
       <div className="px-4 py-3">
-        {livre ? (
+        {!backendOnline ? (
+          <div className="py-2.5 rounded-xl text-center text-[12px] font-bold text-slate-400/60 bg-slate-400/[0.08]">
+            Backend indisponível
+          </div>
+        ) : inacessivel ? (
+          <div className="py-2.5 rounded-xl text-center text-[12px] font-bold text-slate-400/60 bg-slate-400/[0.08]">
+            Servidor inacessível
+          </div>
+        ) : livre ? (
             <button
               onClick={onConectar}
               disabled={conectando}
               className="w-full py-2.5 rounded-xl font-bold text-[13px] text-white transition-all cursor-pointer disabled:opacity-40 shadow-sm"
-              style={{ background: conectando ? "rgba(27,47,72,0.1)" : isWhite ? "#1B2F48" : "#00A651" }}
+              style={{ background: conectando ? "rgba(27,47,72,0.1)" : isWhite ? "#212E3E" : "#00A651" }}
             >
               {conectando ? "A ligar..." : "Aceder via RDP"}
             </button>
@@ -148,10 +174,21 @@ export default function EclusaAcessoCard({
                 onClick={onEncerrar}
                 className={`w-full py-2 rounded-xl font-bold text-[12px] transition-all cursor-pointer ${isWhite ? "text-slate-500 bg-slate-50" : "text-white/50 bg-white/[0.05]"}`}
                 style={{ border: isWhite ? "1px solid rgba(0,0,0,0.05)" : "1px solid rgba(255,255,255,0.1)" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#E30613"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(227,6,19,0.4)"; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#E32C2C"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(227,6,19,0.4)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = isWhite ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.5)"; (e.currentTarget as HTMLButtonElement).style.borderColor = isWhite ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.1)"; }}
               >
                 Terminar Sessão
+              </button>
+            )}
+            {!ehMinha && ehAdmin && sessao.conectado && onForcarEncerrar && (
+              <button
+                onClick={onForcarEncerrar}
+                className="w-full py-2 rounded-xl font-bold text-[12px] text-white transition-all cursor-pointer"
+                style={{ background: "#E32C2C" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#b91c1c"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#E32C2C"; }}
+              >
+                Forçar Desconexão
               </button>
             )}
           </div>

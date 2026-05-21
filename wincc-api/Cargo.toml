@@ -2,45 +2,32 @@
 name = "wincc-api"
 version = "0.2.0"
 edition = "2021"
+default-run = "wincc-api"
 
 [dependencies]
-# HTTP framework
-axum        = { version = "0.7", features = ["ws", "macros"] }
-tower       = { version = "0.4", features = ["util", "timeout"] }
-tower-http  = { version = "0.5", features = ["cors", "compression-gzip", "request-id", "trace"] }
-
-# Async runtime
-tokio       = { version = "1", features = ["full"] }
-tokio-stream = { version = "0.1", features = ["sync"] }
-
-# Serialization
-serde       = { version = "1", features = ["derive"] }
-serde_json  = "1"
-
-# Database — PostgreSQL async com compile-time query checking
-sqlx        = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "json", "ipnetwork"] }
-
-# Authentication
-argon2      = "0.5"        # password hashing — melhor que SHA256
-jsonwebtoken = "9"         # JWT tokens
-rand        = "0.8"        # geração de secrets
-
-# Date/Time
-chrono      = { version = "0.4", features = ["serde"] }
-
-# UUIDs
-uuid        = { version = "1", features = ["v4", "serde"] }
-
-# Utilities
-thiserror   = "1"          # error types robustos
-tracing     = "0.1"        # structured logging
+axum          = { version = "0.7", features = ["ws", "macros"] }
+tower         = { version = "0.4", features = ["util", "timeout"] }
+tower-http    = { version = "0.5", features = ["cors", "compression-gzip", "request-id", "trace"] }
+tokio         = { version = "1",   features = ["full"] }
+tokio-stream  = { version = "0.1", features = ["sync"] }
+serde         = { version = "1",   features = ["derive"] }
+serde_json    = "1"
+sqlx          = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "json", "ipnetwork"] }
+argon2        = "0.5"
+jsonwebtoken  = "9"
+rand          = "0.9"
+chrono        = { version = "0.4", features = ["serde"] }
+uuid          = { version = "1",   features = ["v4", "serde"] }
+thiserror     = "2"
+tracing       = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-dotenvy     = "0.15"       # .env loading
-once_cell   = "1"          # globals thread-safe
-futures     = "0.3"        # join_all para polling paralelo
+dotenvy       = "0.15"
+futures       = "0.3"
+async-trait   = "0.1"
 
-# Windows APIs (RDP, WTS, Firewall)
-windows     = { version = "0.58", features = [
+# Windows APIs — RDP, WTS, Firewall (só compila em Windows)
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
     "Win32_System_RemoteDesktop",
     "Win32_Foundation",
     "Win32_Security",
@@ -48,11 +35,11 @@ windows     = { version = "0.58", features = [
 ] }
 
 [profile.release]
-opt-level   = 3
-lto         = "thin"       # link-time optimisation sem custo excessivo de compilação
+opt-level     = 3
+lto           = "thin"
 codegen-units = 1
-strip       = true         # remove símbolos de debug → binário menor
-panic       = "abort"      # sem stack unwinding em produção → melhor performance
+strip         = true
+panic         = "abort"
 
 [profile.dev]
-opt-level   = 1            # compilação mais rápida em dev sem ser completamente lenta
+opt-level = 1
