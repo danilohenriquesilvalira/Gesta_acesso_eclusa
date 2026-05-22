@@ -59,8 +59,7 @@ pub async fn iniciar_supervisao(
         total
     };
 
-    eprintln!("[{}] Supervisão iniciada: {} em {} (sessão {}) total_supervisores={}",
-        now(), req.supervisor, req.cliente, sessao_id, total);
+    tracing::info!(supervisor = %req.supervisor, cliente = %req.cliente, sessao_id, total_supervisores = total, "Supervisão iniciada");
 
     let db  = s.db.clone();
     let msg = format!("Supervisão iniciada: {} em {} sessão {} (total: {})",
@@ -95,7 +94,7 @@ pub async fn encerrar_supervisao(
         broadcast_estado(&st, &s.sse_tx);
     }
 
-    eprintln!("[{}] Supervisão encerrada: {} em {}", now(), req.supervisor, req.cliente);
+    tracing::info!(supervisor = %req.supervisor, cliente = %req.cliente, "Supervisão encerrada");
 
     let db  = s.db.clone();
     let msg = format!("Supervisão encerrada: {} em {} (por: {})", req.supervisor, req.cliente, auth.username);

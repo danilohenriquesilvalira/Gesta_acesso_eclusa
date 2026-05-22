@@ -46,8 +46,11 @@ services:
       RDP_USER:      ${RDP_USER:-Administrator}
       RDP_PASSWORD:  ${RDP_PASSWORD:-changeme}
       ECLUSAS_FILE:  /opt/next/data/eclusas.json
+      SSH_KEY_PATH:  /etc/wincc-api/ssh_key
+      SSH_PORT:      ${SSH_PORT:-22}
     volumes:
       - eclusas_data:/opt/next/data
+      - ${SSH_KEY_FILE:-./ssh_key}:/etc/wincc-api/ssh_key:ro
     depends_on:
       postgres:
         condition: service_healthy

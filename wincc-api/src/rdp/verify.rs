@@ -1,20 +1,16 @@
-#[cfg(windows)]
-use std::process::Command;
-#[cfg(windows)]
 use crate::config::Config;
 use crate::types::{now, RdpInfo};
 
-/// Chama qwinsta no servidor RDP remoto (Windows Server 2022) e devolve o estado actual da sessão.
-/// Usa o comando nativo do Windows — NÃO usa RustDesk nem qualquer cliente RDP de terceiros.
-/// Em Linux retorna sempre inacessível (qwinsta não existe fora de Windows).
-pub fn verificar_rdp(ip: &str) -> RdpInfo {
-    #[cfg(not(windows))]
-    {
-        let _ = ip;
-        return RdpInfo { verificado: false, timestamp: now(), ..Default::default() };
-    }
+/// Verifica estado da sessão RDP no servidor remoto.
+/// Windows: qwinsta /server:<ip> (nativo, sem dependências)
+/// Linux:   ssh user@ip qwinsta  (via OpenSSH, mesmo output)
+pub fn verificar_rdp(ip: &str, cfg: &Config) -> RdpInfo {
+    verificar_rdp_impl(ip, cfg)
+}
 
-    #[cfg(windows)]
+#[cfg(windows)]
+fn verificar_rdp_impl(ip: &str, _cfg: &Config) -> RdpInfo {
+    use std::process::Command;
     match Command::new("qwinsta")
         .arg(format!("/server:{}", ip))
         .output()
@@ -31,13 +27,43 @@ pub fn verificar_rdp(ip: &str) -> RdpInfo {
     }
 }
 
-#[cfg(windows)]
+#[cfg(not(windows))]
+fn verificar_rdp_impl(ip: &str, cfg: &Config) -> RdpInfo {
+    use std::process::Command;
+    match Command::new("ssh")
+        .args([
+            "-i", &cfg.ssh_key_path,
+            "-p", &cfg.ssh_port.to_string(),
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=3",
+            &format!("{}@{}", cfg.rdp_user, ip),
+            "qwinsta",
+        ])
+        .output()
+    {
+        Ok(out) => {
+            if !out.status.success() {
+                return RdpInfo { verificado: false, timestamp: now(), ..Default::default() };
+            }
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let (ocupado, utilizador, nome_sessao, sessao_id) = parse_qwinsta(&stdout);
+            RdpInfo { ocupado, utilizador, verificado: true, timestamp: now(), nome_sessao, sessao_id, ..Default::default() }
+        }
+        Err(_) => RdpInfo { verificado: false, timestamp: now(), ..Default::default() },
+    }
+}
+
+/// Faz parse do output de qwinsta (idêntico local e remoto).
+/// Filtra sessões SSH/console — só processa sessões rdp-tcp#*.
 fn parse_qwinsta(output: &str) -> (bool, String, String, Option<u32>) {
     for line in output.lines().skip(1) {
         if line.contains("Listen") || line.contains("Idle") || line.contains("Disc") { continue; }
         if !line.to_uppercase().contains("ACTIVE") { continue; }
         let nome_sessao = line.get(1..18).map(|s| s.trim().to_string()).unwrap_or_default();
-        let username    = line.get(19..42)
+        // Ignorar sessões SSH ou de console — só RDP interessa
+        if !nome_sessao.starts_with("rdp-tcp") { continue; }
+        let username = line.get(19..42)
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .or_else(|| line.get(19..).map(|s| s.trim().to_string()))
@@ -48,8 +74,9 @@ fn parse_qwinsta(output: &str) -> (bool, String, String, Option<u32>) {
     (false, String::new(), String::new(), None)
 }
 
-/// Obtém o IP do cliente RDP via WTS API (Windows Server 2022 — nativo).
-/// Não usa RustDesk nem qualquer software de terceiros.
+/// Obtém o IP do cliente RDP conectado à sessão.
+/// Windows: WTS API nativa (sem dependências externas)
+/// Linux:   SSH + script PowerShell helper em C:\wincc-api\get_client_ip.ps1
 #[cfg(windows)]
 pub fn obter_ip_cliente_rdp(server_ip: &str, session_id: u32, _cfg: &Config) -> Option<String> {
     use windows::Win32::System::RemoteDesktop::{
@@ -78,4 +105,27 @@ pub fn obter_ip_cliente_rdp(server_ip: &str, session_id: u32, _cfg: &Config) -> 
         WTSCloseServer(server);
         ip
     }
+}
+
+#[cfg(not(windows))]
+pub fn obter_ip_cliente_rdp(server_ip: &str, session_id: u32, cfg: &Config) -> Option<String> {
+    use std::process::Command;
+    // C:\wincc-api\get_client_ip.ps1 criado pelo setup_windows_server_2022.ps1
+    let output = Command::new("ssh")
+        .args([
+            "-i", &cfg.ssh_key_path,
+            "-p", &cfg.ssh_port.to_string(),
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=5",
+            &format!("{}@{}", cfg.rdp_user, server_ip),
+            "powershell.exe", "-NonInteractive", "-File",
+            "C:\\wincc-api\\get_client_ip.ps1",
+            &session_id.to_string(),
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    let ip = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if ip.is_empty() || ip == "0.0.0.0" { None } else { Some(ip) }
 }

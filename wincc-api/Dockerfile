@@ -13,7 +13,7 @@ RUN cargo build --release --bin wincc-api
 FROM ubuntu:24.04
 
 RUN apt-get update && \
-    apt-get install -y libssl3 ca-certificates && \
+    apt-get install -y libssl3 ca-certificates openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/wincc-api /usr/local/bin/wincc-api

@@ -99,8 +99,7 @@ async fn main() {
     // ── AppState — construído uma vez, partilhado por Arc ─────────────────────
     let state = AppState::new(db, cfg.clone(), operadores, eclusas_iniciais);
 
-    // ── Startup Windows: limpa firewall + configura shadow RDP ───────────────
-    #[cfg(windows)]
+    // ── Startup: limpa firewall + configura shadow RDP em cada servidor ─────
     for client in &state.rdp_clients {
         let ip  = client.ip.clone();
         let cfg = cfg.clone();

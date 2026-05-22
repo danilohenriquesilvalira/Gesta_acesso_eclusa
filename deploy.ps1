@@ -88,17 +88,27 @@ if (-not $SoBackend) {
     Aviso "Modo -SoBackend activo -- copia de ficheiros ignorada"
 }
 
-# -- 3. Rebuild Docker ---------------------------------------------------------
+# -- 3. Gerar chave SSH para VMs Windows (só se ainda não existir) -------------
+Passo "A verificar chave SSH para as VMs Windows..."
+Invoke-SSH "test -f $SERVIDOR_PATH/infra/ssh_key && echo 'chave ja existe' || (ssh-keygen -t ed25519 -f $SERVIDOR_PATH/infra/ssh_key -N '' && chmod 600 $SERVIDOR_PATH/infra/ssh_key && echo 'chave gerada')"
+Write-Host ""
+$pubkey = & "$PLINK" -ssh -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "cat $SERVIDOR_PATH/infra/ssh_key.pub" 2>&1
+Write-Host "  CHAVE PUBLICA SSH (adicionar nas VMs Windows):" -ForegroundColor Yellow
+Write-Host "  $pubkey" -ForegroundColor White
+Write-Host ""
+Ok "Chave SSH verificada"
+
+# -- 4. Rebuild Docker ---------------------------------------------------------
 Passo "A reconstruir o backend no servidor (2-4 min)..."
 Invoke-SSH "cd $SERVIDOR_PATH/infra && docker compose up -d --build api"
 Ok "Container reconstruido e em execucao"
 
-# -- 4. Limpar imagens antigas -------------------------------------------------
+# -- 5. Limpar imagens antigas -------------------------------------------------
 Passo "A limpar imagens Docker obsoletas..."
 & "$PLINK" -ssh -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "docker image prune -f" | Out-Null
 Ok "Limpeza concluida"
 
-# -- 5. Health check -----------------------------------------------------------
+# -- 6. Health check -----------------------------------------------------------
 Passo "A aguardar arranque do backend (5s)..."
 Start-Sleep -Seconds 5
 $health = & "$PLINK" -ssh -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "curl -sf http://localhost:8080/health && echo ONLINE || echo FALHOU" 2>&1
@@ -109,7 +119,7 @@ if ($health -match "FALHOU" -or $LASTEXITCODE -ne 0) {
     Ok "Backend online: http://${SERVIDOR_IP}:8080/health"
 }
 
-# -- 6. Logs (opcional) --------------------------------------------------------
+# -- 7. Logs (opcional) --------------------------------------------------------
 if ($VerLogs) {
     Write-Host ""
     Write-Host "  -- Ultimas 50 linhas de log --" -ForegroundColor DarkCyan

@@ -36,6 +36,8 @@ pub struct Config {
     pub rdp_user:     String,
     pub rdp_password: String,
     pub api_port:     String,
+    #[allow(dead_code)] pub ssh_key_path: String,
+    #[allow(dead_code)] pub ssh_port:     u16,
 }
 
 pub fn load_config() -> Config {
@@ -47,6 +49,11 @@ pub fn load_config() -> Config {
         rdp_user:     std::env::var("RDP_USER").unwrap_or_else(|_| "Administrator".into()),
         rdp_password: require_env("RDP_PASSWORD"),
         api_port:     std::env::var("API_PORT").unwrap_or_else(|_| "8080".into()),
+        ssh_key_path: std::env::var("SSH_KEY_PATH")
+                        .unwrap_or_else(|_| "/etc/wincc-api/ssh_key".into()),
+        ssh_port:     std::env::var("SSH_PORT").ok()
+                        .and_then(|p| p.parse().ok())
+                        .unwrap_or(22),
     }
 }
 

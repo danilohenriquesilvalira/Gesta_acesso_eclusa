@@ -3,7 +3,6 @@ use crate::config::Config;
 
 /// Bloqueia IP de cliente no firewall do servidor RDP.
 /// Cria regra permanente — use desbloquear_ip para remover.
-#[cfg(windows)]
 pub fn bloquear_ip(server_ip: &str, client_ip: &str, cfg: &Config) {
     let rule_name = rule_name_for(client_ip);
     let ps = format!(
@@ -36,7 +35,6 @@ pub fn desbloquear_ip(server_ip: &str, client_ip: &str, cfg: &Config) {
 
 /// Remove TODAS as regras EDP-Block-RDP-* do servidor.
 /// Chamado no startup para limpar resíduos de execuções anteriores.
-#[cfg(windows)]
 pub fn limpar_todos_bloqueios(server_ip: &str, cfg: &Config) {
     let ps = "Get-NetFirewallRule -DisplayName 'EDP-Block-RDP-*' \
               -ErrorAction SilentlyContinue | Remove-NetFirewallRule; Write-Output 'OK'";
@@ -46,7 +44,6 @@ pub fn limpar_todos_bloqueios(server_ip: &str, cfg: &Config) {
 
 /// Configura shadow mode no servidor Windows: view-only sem consentimento.
 /// Shadow=4 → Interactive, no consent (Windows Server 2022)
-#[cfg(windows)]
 pub fn configurar_shadow(server_ip: &str, cfg: &Config) {
     let ps = "$p='HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services'; \
               if(-not(Test-Path $p)){New-Item -Path $p -Force|Out-Null}; \
@@ -62,18 +59,40 @@ fn rule_name_for(client_ip: &str) -> String {
     format!("EDP-Block-RDP-{}", client_ip.replace('.', "-"))
 }
 
-/// Executa um comando PowerShell num servidor remoto via WMIC.
+/// Executa um comando PowerShell num servidor Windows remoto.
+/// Windows: WMIC (sem dependências externas, nativo em Windows Server)
+/// Linux:   SSH + powershell.exe (openssh-client instalado na imagem Docker)
 fn run_remote_ps(server_ip: &str, ps: &str, cfg: &Config) {
-    let cmd = format!("powershell.exe -NonInteractive -Command \"{}\"", ps);
-    let result = Command::new("wmic")
-        .args([
-            &format!("/node:{}", server_ip),
-            &format!("/user:{}", cfg.rdp_user),
-            &format!("/password:{}", cfg.rdp_password),
-            "process", "call", "create", &cmd,
-        ])
-        .output();
-    if let Err(e) = result {
-        tracing::error!(server_ip = %server_ip, erro = %e, "WMIC falhou");
+    #[cfg(windows)]
+    {
+        let cmd = format!("powershell.exe -NonInteractive -Command \"{}\"", ps);
+        let result = Command::new("wmic")
+            .args([
+                &format!("/node:{}", server_ip),
+                &format!("/user:{}", cfg.rdp_user),
+                &format!("/password:{}", cfg.rdp_password),
+                "process", "call", "create", &cmd,
+            ])
+            .output();
+        if let Err(e) = result {
+            tracing::error!(server_ip = %server_ip, erro = %e, "WMIC falhou");
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let result = Command::new("ssh")
+            .args([
+                "-i", &cfg.ssh_key_path,
+                "-p", &cfg.ssh_port.to_string(),
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=5",
+                &format!("{}@{}", cfg.rdp_user, server_ip),
+                "powershell.exe", "-NonInteractive", "-Command", ps,
+            ])
+            .output();
+        if let Err(e) = result {
+            tracing::error!(server_ip = %server_ip, erro = %e, "SSH PowerShell falhou");
+        }
     }
 }
