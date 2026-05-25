@@ -3,5 +3,6 @@
   "rdp_user": "Administrator",
   "rdp_password": "Rls@2024",
   "ip_cliente1": "172.29.164.13",
-  "ip_cliente2": "172.29.164.14"
+  "ip_cliente2": "172.29.164.14",
+  "ip_reserva": "172.29.164.15"
 }

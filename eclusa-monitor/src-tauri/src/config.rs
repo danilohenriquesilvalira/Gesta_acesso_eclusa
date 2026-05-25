@@ -7,6 +7,8 @@ pub struct Config {
     pub rdp_password: String,
     pub ip_cliente1:  String,
     pub ip_cliente2:  String,
+    #[serde(default)]
+    pub ip_reserva:   String,
 }
 
 impl Default for Config {
@@ -17,6 +19,7 @@ impl Default for Config {
             rdp_password: String::new(),
             ip_cliente1:  "172.29.164.13".to_string(),
             ip_cliente2:  "172.29.164.14".to_string(),
+            ip_reserva:   "172.29.164.15".to_string(),
         }
     }
 }

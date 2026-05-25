@@ -111,9 +111,26 @@ pub async fn rdp_poll_loop(state: Shared) {
                     }
                 }
 
-                // Log apenas em mudança de estado
+                // Log e failover em mudança de estado
                 if mudou_verificado && !info.verificado {
                     tracing::warn!(cliente = %cliente, ip = %ip, "RDP inacessível");
+
+                    // Servidor caiu — se havia sessão ativa, notifica frontend para failover
+                    let tem_sessao = match cliente.as_str() {
+                        "cliente1" => st.sessoes.cliente1.conectado,
+                        "cliente2" => st.sessoes.cliente2.conectado,
+                        _          => false,
+                    };
+                    if tem_sessao {
+                        let reserva_ip = state.cfg.reserva_ip.clone();
+                        tracing::warn!(cliente = %cliente, reserva = %reserva_ip, "Failover — a redirecionar para servidor reserva");
+                        let payload = serde_json::json!({
+                            "tipo": "failover",
+                            "cliente": cliente,
+                            "ip_reserva": reserva_ip,
+                        }).to_string();
+                        let _ = state.sse_tx.send(format!("event: failover\ndata: {payload}\n\n"));
+                    }
                 } else if mudou_verificado && info.verificado {
                     tracing::info!(cliente = %cliente, ip = %ip, "RDP acessível");
                 }

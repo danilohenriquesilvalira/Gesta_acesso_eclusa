@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import Header            from "./components/layout/Header";
@@ -35,21 +35,35 @@ export default function App() {
   const [apiUrl,      setApiUrl]      = useState(DEFAULT_API);
   const [ipCliente1,  setIpCliente1]  = useState("172.29.164.13");
   const [ipCliente2,  setIpCliente2]  = useState("172.29.164.14");
+  const [ipReserva,   setIpReserva]   = useState("172.29.164.15");
 
   const { username, token, isAdmin, login, logout } = useAuth();
-  const { estado, apiOk, fetchEstado } = useEstado(apiUrl);
+
+  // onFailoverSse via ref — quebra dependência circular useRdp ↔ useEstado
+  const onFailoverRef = useRef<((p: { cliente: string; ip_reserva: string }) => void) | undefined>(undefined);
+  const onFailoverStable = useCallback((p: { cliente: string; ip_reserva: string }) => {
+    onFailoverRef.current?.(p);
+  }, []);
+
+  const { estado, apiOk, fetchEstado } = useEstado(apiUrl, onFailoverStable);
+
   const {
     conectando, emSupervisao, erro, setErro,
     handleConectar, handleEncerrar, handleAdminEncerrar, handleSupervisao, handleSairSupervisao,
-  } = useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin: () => setLoginAberto(true), ipCliente1, ipCliente2 });
+    onFailoverSse,
+  } = useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin: () => setLoginAberto(true), ipCliente1, ipCliente2, ipReserva });
+
+  // Liga o ref ao handler real depois de useRdp estar pronto
+  useEffect(() => { onFailoverRef.current = onFailoverSse; }, [onFailoverSse]);
 
   // Config Tauri — lê config.json (api_url + IPs dos clientes RDP)
   useEffect(() => {
-    invoke<{ api_url: string; ip_cliente1: string; ip_cliente2: string }>("get_config")
+    invoke<{ api_url: string; ip_cliente1: string; ip_cliente2: string; ip_reserva?: string }>("get_config")
       .then(c => {
         setApiUrl(c.api_url);
         if (c.ip_cliente1) setIpCliente1(c.ip_cliente1);
         if (c.ip_cliente2) setIpCliente2(c.ip_cliente2);
+        if (c.ip_reserva)  setIpReserva(c.ip_reserva);
       })
       .catch(() => {});
   }, []);

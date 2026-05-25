@@ -38,6 +38,8 @@ pub struct Config {
     pub api_port:     String,
     #[allow(dead_code)] pub ssh_key_path: String,
     #[allow(dead_code)] pub ssh_port:     u16,
+    /// IP do servidor WinCC de reserva — usado no failover automático
+    pub reserva_ip:   String,
 }
 
 pub fn load_config() -> Config {
@@ -54,6 +56,8 @@ pub fn load_config() -> Config {
         ssh_port:     std::env::var("SSH_PORT").ok()
                         .and_then(|p| p.parse().ok())
                         .unwrap_or(22),
+        reserva_ip:   std::env::var("RESERVA_IP")
+                        .unwrap_or_else(|_| "172.29.164.15".into()),
     }
 }
 

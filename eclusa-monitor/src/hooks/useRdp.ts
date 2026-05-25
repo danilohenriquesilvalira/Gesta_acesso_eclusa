@@ -13,9 +13,10 @@ interface Options {
   onNeedLogin: () => void;
   ipCliente1:  string;
   ipCliente2:  string;
+  ipReserva:   string;
 }
 
-export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin, ipCliente1, ipCliente2 }: Options) {
+export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin, ipCliente1, ipCliente2, ipReserva }: Options) {
   const clienteIps: Record<ClienteKey, string> = {
     cliente1: ipCliente1,
     cliente2: ipCliente2,
@@ -132,6 +133,29 @@ export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLog
     setEmSupervisao(null);
   }, [apiUrl, token, emSupervisao, username]);
 
+  // ── Failover automático — servidor caiu, reconectar no reserva ─────────────
+
+  const handleFailover = useCallback(async (cliente: ClienteKey, ipNovoServidor: string) => {
+    // Fecha mstsc atual silenciosamente
+    try { await invoke("fechar_rdp"); } catch { /* já fechou */ }
+
+    // Pequena pausa para o mstsc terminar
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Abre novo RDP no servidor reserva
+    const msg = await invoke<string>("connect_rdp", { ip: ipNovoServidor, cliente }).catch(String);
+    if (msg) setErro(`Failover: ${msg}`);
+
+    fetchEstado();
+  }, [fetchEstado]);
+
+  // Exposto para o App passar ao useEstado como callback de failover SSE
+  const onFailoverSse = useCallback((p: { cliente: string; ip_reserva: string }) => {
+    const cliente = p.cliente as ClienteKey;
+    const ip = p.ip_reserva || ipReserva;
+    handleFailover(cliente, ip);
+  }, [handleFailover, ipReserva]);
+
   // ── Eventos Tauri ────────────────────────────────────────────────────────────
 
   // mstsc fechou → encerrar sessão na API
@@ -165,5 +189,6 @@ export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLog
     handleAdminEncerrar,
     handleSupervisao,
     handleSairSupervisao,
+    onFailoverSse,
   };
 }
