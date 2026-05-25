@@ -104,7 +104,7 @@ pub fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String
             .output();
     }
 
-    match Command::new("mstsc").args([&format!("/v:{ip}"), "/f"]).spawn() {
+    match Command::new("mstsc").args([&format!("/v:{ip}"), "/multimon", "/f"]).spawn() {
         Ok(mut child) => {
             std::thread::spawn(move || {
                 let _ = child.wait();
