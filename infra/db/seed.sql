@@ -18,15 +18,13 @@ VALUES (
 )
 ON CONFLICT (username) DO NOTHING;
 
--- WinCC VMs das 5 eclusas (IPs a configurar conforme ambiente)
+-- WinCC VMs — ambiente Proxmox (3 VMs activas, expandir quando forem criadas CL/CM/VR)
+-- VM 101=RG (.13), VM 102=PN (.14), VM 103=Reserva (.15)
 INSERT INTO wincc_vms (name, ip, rdp_port, eclusa_code, is_cluster, failover_target_id)
 VALUES
-    ('WinCC-CL', '172.29.164.50', 3389, 'CL', FALSE, NULL),
-    ('WinCC-CM', '172.29.164.51', 3389, 'CM', FALSE, NULL),
-    ('WinCC-PN', '172.29.164.52', 3389, 'PN', FALSE, NULL),
-    ('WinCC-RG', '172.29.164.53', 3389, 'RG', FALSE, NULL),
-    ('WinCC-VR', '172.29.164.54', 3389, 'VR', FALSE, NULL),
-    ('WinCC-Cluster', '172.29.164.60', 3389, NULL, TRUE, NULL)
+    ('WinCC-RG',      '172.29.164.13', 3389, 'RG', FALSE, NULL),
+    ('WinCC-PN',      '172.29.164.14', 3389, 'PN', FALSE, NULL),
+    ('WinCC-Reserva', '172.29.164.15', 3389, NULL, TRUE,  NULL)
 ON CONFLICT (name) DO NOTHING;
 
 -- Definir failover_target para todas as VMs -> Cluster

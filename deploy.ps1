@@ -63,7 +63,7 @@ Ok "Container antigo removido"
 
 # -- 5. Iniciar novo container -------------------------------------------------
 Passo "A iniciar novo container..."
-Invoke-SSH "docker run -d --name wincc-api --restart unless-stopped --network $REDE_DOCKER -p 8080:8080 --env-file $SERVIDOR_PATH/.env -e DATABASE_URL=$DB_URL $IMAGEM"
+Invoke-SSH "docker run -d --name wincc-api --restart unless-stopped --network $REDE_DOCKER -p 8080:8080 -v /etc/wincc-api/ssh_key:/etc/wincc-api/ssh_key:ro --env-file $SERVIDOR_PATH/.env -e DATABASE_URL=$DB_URL $IMAGEM"
 Ok "Container iniciado"
 
 # -- 6. Health check -----------------------------------------------------------
