@@ -85,7 +85,7 @@ export default function App() {
               const cliente = ECLUSA_CLIENTE[key as keyof typeof ECLUSA_CLIENTE];
               return (
                 <EclusaAcessoCard key={key} nomeEclusa={key}
-                  nomeCliente={cliente ? CLIENTES[cliente].nome : "Posto Indisponível"}
+                  nomeCliente={cliente ? (cliente === "cliente1" ? ipCliente1 : ipCliente2) : "Posto Indisponível"}
                   sessao={cliente ? sessao(cliente) : { operador: "", timestamp_inicio: "", conectado: false }}
                   rdp={cliente ? rdpInfo(cliente) : { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false }}
                   conectando={cliente ? conectando === cliente : false}
