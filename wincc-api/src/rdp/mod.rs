@@ -71,13 +71,19 @@ pub async fn rdp_poll_loop(state: Shared) {
                 new_info.nao_autorizado = nao_autorizado;
                 st.rdp.insert(cliente.clone(), new_info);
 
-                // Auto-limpa supervisões quando sessão RDP termina
-                if !info.ocupado {
-                    let sups = match cliente.as_str() {
-                        "cliente1" => &mut st.supervisoes.cliente1,
-                        "cliente2" => &mut st.supervisoes.cliente2,
+                // Auto-limpa sessão e supervisões quando RDP fica livre mas sessão ficou presa
+                if !info.ocupado && info.verificado {
+                    let (sessao, sups) = match cliente.as_str() {
+                        "cliente1" => (&mut st.sessoes.cliente1, &mut st.supervisoes.cliente1),
+                        "cliente2" => (&mut st.sessoes.cliente2, &mut st.supervisoes.cliente2),
                         _          => continue,
                     };
+                    if sessao.conectado {
+                        tracing::info!(cliente = %cliente, operador = %sessao.operador, "Sessão auto-encerrada — RDP já livre");
+                        sessao.conectado       = false;
+                        sessao.operador        = String::new();
+                        sessao.timestamp_inicio = String::new();
+                    }
                     if !sups.is_empty() {
                         tracing::info!(cliente = %cliente, "Supervisão auto-encerrada — sessão RDP libertada");
                         sups.clear();

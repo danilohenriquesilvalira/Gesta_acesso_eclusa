@@ -92,15 +92,17 @@ pub fn configurar_registo_rdp() {
 pub fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String {
     let cfg = load_config();
 
-    // Bloqueante: garante credenciais escritas antes do mstsc arrancar NLA.
-    let _ = Command::new("cmdkey")
-        .creation_flags(CREATE_NO_WINDOW)
-        .args([
-            &format!("/generic:{ip}"),
-            &format!("/user:{}", cfg.rdp_user),
-            &format!("/pass:{}", cfg.rdp_password),
-        ])
-        .output();
+    // Guardar credenciais nos dois formatos que o NLA/mstsc consulta
+    for target in [ip.as_str(), &format!("TERMSRV/{ip}")] {
+        let _ = Command::new("cmdkey")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args([
+                &format!("/generic:{target}"),
+                &format!("/user:{}", cfg.rdp_user),
+                &format!("/pass:{}", cfg.rdp_password),
+            ])
+            .output();
+    }
 
     match Command::new("mstsc").args([&format!("/v:{ip}"), "/multimon", "/f"]).spawn() {
         Ok(mut child) => {
@@ -154,8 +156,8 @@ pub fn connect_shadow(
             .output();
     }
 
-    // /span: estica a janela por todos os monitores físicos (shadow viewer full-screen)
-    let cmdline = format!("mstsc /shadow:{sessaoId} /v:{ip} /noConsentPrompt /span");
+    // /multimon: cada monitor físico fica com um ecrã completo (igual ao RDP normal)
+    let cmdline = format!("mstsc /shadow:{sessaoId} /v:{ip} /noConsentPrompt /multimon");
 
     match mstsc_com_credenciais(&cmdline, &cfg.rdp_user, &cfg.rdp_password, &ip) {
         Ok((pid, handle)) => {
