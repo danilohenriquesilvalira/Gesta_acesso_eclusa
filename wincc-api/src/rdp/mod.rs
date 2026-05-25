@@ -73,20 +73,32 @@ pub async fn rdp_poll_loop(state: Shared) {
 
                 // Auto-limpa sessão e supervisões quando RDP fica livre mas sessão ficou presa
                 if !info.ocupado && info.verificado {
-                    let (sessao, sups) = match cliente.as_str() {
-                        "cliente1" => (&mut st.sessoes.cliente1, &mut st.supervisoes.cliente1),
-                        "cliente2" => (&mut st.sessoes.cliente2, &mut st.supervisoes.cliente2),
-                        _          => continue,
-                    };
-                    if sessao.conectado {
-                        tracing::info!(cliente = %cliente, operador = %sessao.operador, "Sessão auto-encerrada — RDP já livre");
-                        sessao.conectado       = false;
-                        sessao.operador        = String::new();
-                        sessao.timestamp_inicio = String::new();
-                    }
-                    if !sups.is_empty() {
-                        tracing::info!(cliente = %cliente, "Supervisão auto-encerrada — sessão RDP libertada");
-                        sups.clear();
+                    match cliente.as_str() {
+                        "cliente1" => {
+                            if st.sessoes.cliente1.conectado {
+                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente1.operador, "Sessão auto-encerrada — RDP já livre");
+                                st.sessoes.cliente1.conectado        = false;
+                                st.sessoes.cliente1.operador         = String::new();
+                                st.sessoes.cliente1.timestamp_inicio = String::new();
+                            }
+                            if !st.supervisoes.cliente1.is_empty() {
+                                tracing::info!(cliente = %cliente, "Supervisão auto-encerrada — sessão RDP libertada");
+                                st.supervisoes.cliente1.clear();
+                            }
+                        }
+                        "cliente2" => {
+                            if st.sessoes.cliente2.conectado {
+                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente2.operador, "Sessão auto-encerrada — RDP já livre");
+                                st.sessoes.cliente2.conectado        = false;
+                                st.sessoes.cliente2.operador         = String::new();
+                                st.sessoes.cliente2.timestamp_inicio = String::new();
+                            }
+                            if !st.supervisoes.cliente2.is_empty() {
+                                tracing::info!(cliente = %cliente, "Supervisão auto-encerrada — sessão RDP libertada");
+                                st.supervisoes.cliente2.clear();
+                            }
+                        }
+                        _ => continue,
                     }
                 }
 
