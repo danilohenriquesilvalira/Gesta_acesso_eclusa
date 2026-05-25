@@ -18,12 +18,7 @@ import type { ClienteKey, Eclusa, Pagina, RdpInfo, Sessao, Supervisao } from "./
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const DEFAULT_API = "http://172.29.164.10:8080";
-
-const CLIENTES: Record<ClienteKey, { nome: string; ip: string }> = {
-  cliente1: { nome: "WinCC Cliente 1", ip: "172.29.164.49" },
-  cliente2: { nome: "WinCC Cliente 2", ip: "172.29.164.51" },
-};
+const DEFAULT_API = "http://172.29.164.12:8080";
 
 const ECLUSA_CLIENTE: Record<string, ClienteKey> = {
   RG: "cliente1",
@@ -38,18 +33,24 @@ export default function App() {
   const [pagina,      setPagina]      = useState<Pagina>("dashboard");
   const [loginAberto, setLoginAberto] = useState(false);
   const [apiUrl,      setApiUrl]      = useState(DEFAULT_API);
+  const [ipCliente1,  setIpCliente1]  = useState("172.29.164.13");
+  const [ipCliente2,  setIpCliente2]  = useState("172.29.164.14");
 
   const { username, token, isAdmin, login, logout } = useAuth();
   const { estado, apiOk, fetchEstado } = useEstado(apiUrl);
   const {
     conectando, emSupervisao, erro, setErro,
     handleConectar, handleEncerrar, handleAdminEncerrar, handleSupervisao, handleSairSupervisao,
-  } = useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin: () => setLoginAberto(true) });
+  } = useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin: () => setLoginAberto(true), ipCliente1, ipCliente2 });
 
-  // Config Tauri — lê api_url do config.json na primeira execução
+  // Config Tauri — lê config.json (api_url + IPs dos clientes RDP)
   useEffect(() => {
-    invoke<{ api_url: string }>("get_config")
-      .then(c => setApiUrl(c.api_url))
+    invoke<{ api_url: string; ip_cliente1: string; ip_cliente2: string }>("get_config")
+      .then(c => {
+        setApiUrl(c.api_url);
+        if (c.ip_cliente1) setIpCliente1(c.ip_cliente1);
+        if (c.ip_cliente2) setIpCliente2(c.ip_cliente2);
+      })
       .catch(() => {});
   }, []);
 

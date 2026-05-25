@@ -15,8 +15,8 @@ impl Default for Config {
             api_url:      "http://172.29.164.12:8080".to_string(),
             rdp_user:     "Administrator".to_string(),
             rdp_password: String::new(),
-            ip_cliente1:  "172.29.164.49".to_string(),
-            ip_cliente2:  "172.29.164.51".to_string(),
+            ip_cliente1:  "172.29.164.13".to_string(),
+            ip_cliente2:  "172.29.164.14".to_string(),
         }
     }
 }

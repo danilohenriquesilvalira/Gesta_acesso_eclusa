@@ -4,12 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import { apiPost } from "../lib/api";
 import type { ClienteKey, Estado } from "../types";
 
-// IPs dos servidores WinCC — sincronizados com config.json
-const CLIENTES: Record<ClienteKey, { nome: string; ip: string }> = {
-  cliente1: { nome: "WinCC Cliente 1", ip: "172.29.164.49" },
-  cliente2: { nome: "WinCC Cliente 2", ip: "172.29.164.51" },
-};
-
 interface Options {
   apiUrl:      string;
   token:       string;
@@ -17,9 +11,15 @@ interface Options {
   estado:      Estado | null;
   fetchEstado: () => void;
   onNeedLogin: () => void;
+  ipCliente1:  string;
+  ipCliente2:  string;
 }
 
-export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin }: Options) {
+export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin, ipCliente1, ipCliente2 }: Options) {
+  const clienteIps: Record<ClienteKey, string> = {
+    cliente1: ipCliente1,
+    cliente2: ipCliente2,
+  };
   const [conectando,   setConectando]   = useState<ClienteKey | null>(null);
   const [emSupervisao, setEmSupervisao] = useState<ClienteKey | null>(null);
   const [erro,         setErro]         = useState("");
@@ -54,14 +54,14 @@ export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLog
 
     if (rdp?.ocupado) {
       const quem = sess?.operador || rdp.utilizador || "alguém";
-      setErro(`Sessão RDP activa em ${CLIENTES[cliente].nome} — ${quem}`);
+      setErro(`Sessão RDP activa em ${cliente} — ${quem}`);
       return;
     }
 
     const outro: ClienteKey = cliente === "cliente1" ? "cliente2" : "cliente1";
     const outraSessao = estado?.sessoes?.[outro];
     if (outraSessao?.conectado && outraSessao.operador.toLowerCase() === username.toLowerCase()) {
-      setErro(`Já tens sessão activa em ${CLIENTES[outro].nome}. Encerra primeiro.`);
+      setErro(`Já tens sessão activa em ${outro}. Encerra primeiro.`);
       return;
     }
 
@@ -77,7 +77,7 @@ export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLog
       fetchEstado();
 
       // Lança mstsc — Tauri envia "rdp-desconectado" quando a janela fechar
-      const msg = await invoke<string>("connect_rdp", { ip: CLIENTES[cliente].ip, cliente });
+      const msg = await invoke<string>("connect_rdp", { ip: clienteIps[cliente], cliente });
       if (msg) setErro(msg);
     } catch {
       setErro("Erro ao contactar a API.");
