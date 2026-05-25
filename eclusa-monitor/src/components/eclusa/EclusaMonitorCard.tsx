@@ -95,18 +95,30 @@ export default function EclusaMonitorCard({
             {outrosSuperv.length > 0 && (
               <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.05] border border-white/10"}`}>
                 <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${isWhite ? "text-slate-500" : "text-white/40"}`}>Também a supervisionar</p>
-                {outrosSuperv.map((s, i) => (
-                  <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#212E3E]" : "text-white/80"}`}>• {s.supervisor}</p>
-                ))}
+                <div className="flex flex-col gap-1">
+                  {outrosSuperv.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isWhite ? "#263CC8" : "#60a5fa" }} />
+                      <p className={`font-bold text-[12px] truncate ${isWhite ? "text-[#212E3E]" : "text-white/80"}`}>{s.supervisor}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         ) : hasAnySuperv ? (
           <div className={`px-4 py-4 rounded-xl ${isWhite ? "bg-red-50 border border-red-100" : "bg-red-500/10 border border-red-500/20"}`}>
-            <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${isWhite ? "text-red-600" : "text-red-400"}`}>Supervisão Ativa</p>
-            {supervisoesAtivas.map((s, i) => (
-              <p key={i} className={`font-semibold text-[12px] ${isWhite ? "text-[#212E3E]" : "text-white/80"}`}>• {s.supervisor}</p>
-            ))}
+            <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${isWhite ? "text-red-600" : "text-red-400"}`}>
+              Supervisão Ativa ({supervisoesAtivas.length})
+            </p>
+            <div className="flex flex-col gap-1">
+              {supervisoesAtivas.map((s, i) => (
+                <div key={i} className="flex items-center gap-2 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isWhite ? "#E32C2C" : "#f87171" }} />
+                  <p className={`font-bold text-[12px] truncate ${isWhite ? "text-[#212E3E]" : "text-white/90"}`}>{s.supervisor}</p>
+                </div>
+              ))}
+            </div>
           </div>
         ) : eclusa ? (
           <div className="flex flex-col gap-4">
@@ -160,40 +172,40 @@ export default function EclusaMonitorCard({
       <div className="px-4 py-3">
         {!backendOnline || inacessivel ? (
           <div style={{ height: 38 }} />
-        ) : ehAdmin && sessaoAtiva ? (
-          euSuperviso ? (
-            <button
-              onClick={onSairSupervisao}
-              className="w-full py-2.5 rounded-xl font-bold text-[12px] text-white transition-all cursor-pointer"
-              style={{ background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.25)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.15)"; }}
-            >
-              Sair de Supervisão
-            </button>
-          ) : (
-            <button
-              onClick={onSupervisao}
-              className="w-full py-2.5 rounded-xl font-bold text-[12px] transition-all cursor-pointer shadow-sm"
-              style={{
-                background: isWhite ? "#212E3E" : "rgba(255,255,255,0.05)",
-                border: isWhite ? "none" : "1px solid rgba(255,255,255,0.15)",
-                color: isWhite ? "#FFFFFF" : "rgba(255,255,255,0.7)",
-              }}
-              onMouseEnter={e => {
-                if (isWhite) { (e.currentTarget as HTMLButtonElement).style.background = "#253e5d"; }
-                else { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(59,130,246,0.2)"; (e.currentTarget as HTMLButtonElement).style.color = "#263CC8"; }
-              }}
-              onMouseLeave={e => {
-                if (isWhite) { (e.currentTarget as HTMLButtonElement).style.background = "#212E3E"; }
-                else { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.15)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)"; }
-              }}
-            >
-              Iniciar Supervisão
-            </button>
-          )
+        ) : euSuperviso ? (
+          <button
+            onClick={onSairSupervisao}
+            className="w-full py-2.5 rounded-xl font-bold text-[12px] text-white transition-all cursor-pointer"
+            style={{ background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.25)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.15)"; }}
+          >
+            Sair de Supervisão
+          </button>
+        ) : sessaoAtiva ? (
+          <button
+            onClick={onSupervisao}
+            className="w-full py-2.5 rounded-xl font-bold text-[12px] transition-all cursor-pointer shadow-sm"
+            style={{
+              background: isWhite ? "#212E3E" : "rgba(255,255,255,0.05)",
+              border: isWhite ? "none" : "1px solid rgba(255,255,255,0.15)",
+              color: isWhite ? "#FFFFFF" : "rgba(255,255,255,0.7)",
+            }}
+            onMouseEnter={e => {
+              if (isWhite) { (e.currentTarget as HTMLButtonElement).style.background = "#253e5d"; }
+              else { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,130,246,0.1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(59,130,246,0.2)"; (e.currentTarget as HTMLButtonElement).style.color = "#263CC8"; }
+            }}
+            onMouseLeave={e => {
+              if (isWhite) { (e.currentTarget as HTMLButtonElement).style.background = "#212E3E"; }
+              else { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.15)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)"; }
+            }}
+          >
+            Iniciar Supervisão
+          </button>
         ) : (
-          <div style={{ height: 38 }} />
+          <div className="py-2.5 rounded-xl text-center text-[11px] font-bold text-slate-400/50 bg-slate-400/[0.05]">
+            Sem sessão RDP ativa
+          </div>
         )}
       </div>
     </div>
