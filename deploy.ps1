@@ -12,10 +12,10 @@ param(
 )
 
 # -- Configuracao --------------------------------------------------------------
-$SERVIDOR_IP   = "10.45.235.165"
+$SERVIDOR_IP   = "172.29.164.12"
 $SERVIDOR_USER = "rls"
 $SERVIDOR_PASS = "Rls@2024"
-$SERVIDOR_PATH = "/home/rls/next"
+$SERVIDOR_PATH = "/home/rls/gestao-acessos-edp"
 $LOCAL_ROOT    = $PSScriptRoot
 
 $PLINK = "C:\Program Files\PuTTY\plink.exe"
@@ -28,7 +28,7 @@ function Ok     { param($msg) Write-Host "  OK  $msg" -ForegroundColor Green }
 function Aviso  { param($msg) Write-Host "  !!  $msg" -ForegroundColor Yellow }
 function Falhou { param($msg) Write-Host "" ; Write-Host "  ERRO: $msg" -ForegroundColor Red ; exit 1 }
 
-$HOSTKEY = "SHA256:36/y+oQR7R9XDa6w/YxHjWfmOHbRd1GpEIznoFPdPGQ"
+$HOSTKEY = "SHA256:OzBG/LrAptWHadjm6g17jFJyiPIqnhIJ3h3SOE0JvCg"
 
 function Invoke-SSH {
     param([string]$Cmd)
