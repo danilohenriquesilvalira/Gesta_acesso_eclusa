@@ -124,12 +124,13 @@ pub async fn rdp_poll_loop(state: Shared) {
                     if tem_sessao {
                         let reserva_ip = state.cfg.reserva_ip.clone();
                         tracing::warn!(cliente = %cliente, reserva = %reserva_ip, "Failover — a redirecionar para servidor reserva");
+                        // Envia como JSON normal no canal SSE — frontend distingue pelo campo "_event"
                         let payload = serde_json::json!({
-                            "tipo": "failover",
+                            "_event": "failover",
                             "cliente": cliente,
                             "ip_reserva": reserva_ip,
                         }).to_string();
-                        let _ = state.sse_tx.send(format!("event: failover\ndata: {payload}\n\n"));
+                        let _ = state.sse_tx.send(payload);
                     }
                 } else if mudou_verificado && info.verificado {
                     tracing::info!(cliente = %cliente, ip = %ip, "RDP acessível");

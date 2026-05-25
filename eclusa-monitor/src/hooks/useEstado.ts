@@ -25,18 +25,18 @@ export function useEstado(apiUrl: string, onFailover?: (p: FailoverPayload) => v
 
     const es = new EventSource(`${apiUrl}/eventos`);
 
-    // Eventos de estado normal (sem nome — tipo "message")
     es.onmessage = e => {
-      try { setEstado(JSON.parse(e.data) as Estado); setApiOk(true); } catch { /* ignore */ }
-    };
-
-    // Evento de failover (named event — "event: failover")
-    es.addEventListener("failover", (e: MessageEvent) => {
       try {
-        const p = JSON.parse(e.data) as FailoverPayload;
-        onFailoverRef.current?.(p);
+        const json = JSON.parse(e.data);
+        // Failover — campo _event distingue do estado normal
+        if (json._event === "failover") {
+          onFailoverRef.current?.({ cliente: json.cliente, ip_reserva: json.ip_reserva });
+          return;
+        }
+        setEstado(json as Estado);
+        setApiOk(true);
       } catch { /* ignore */ }
-    });
+    };
 
     es.onerror = () => setApiOk(false);
 
