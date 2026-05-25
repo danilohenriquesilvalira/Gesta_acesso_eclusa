@@ -151,28 +151,7 @@ pub fn connect_shadow(
             .output();
     }
 
-    // Ficheiro .rdp temporário — força resolução 1920x1080 para que o shadow
-    // caiba num monitor mesmo quando a sessão remota usa /multimon (3840x1080).
-    // Apagado automaticamente no thread de espera após o mstsc fechar.
-    let rdp_path = std::env::temp_dir().join(format!("shadow_{sessaoId}.rdp"));
-    let rdp_content = format!(
-        "full address:s:{ip}\r\n\
-         shadow:i:{sessaoId}\r\n\
-         desktopwidth:i:1920\r\n\
-         desktopheight:i:1080\r\n\
-         screen mode id:i:2\r\n\
-         use multimon:i:0\r\n\
-         negotiate security layer:i:1\r\n\
-         authentication level:i:0\r\n"
-    );
-    if let Err(e) = std::fs::write(&rdp_path, rdp_content) {
-        return format!("Erro ao criar ficheiro shadow: {e}");
-    }
-
-    let cmdline = format!(
-        "mstsc {} /shadow:{sessaoId} /v:{ip} /noConsentPrompt /f",
-        rdp_path.display()
-    );
+    let cmdline = format!("mstsc /shadow:{sessaoId} /v:{ip} /noConsentPrompt /f");
 
     match mstsc_com_credenciais(&cmdline, &cfg.rdp_user, &cfg.rdp_password, &ip) {
         Ok((pid, handle)) => {
@@ -184,15 +163,11 @@ pub fn connect_shadow(
                     WaitForSingleObject(handle as _, u32::MAX);
                     CloseHandle(handle as _);
                 }
-                let _ = std::fs::remove_file(&rdp_path);
                 let _ = app.emit("shadow-fechado", cliente);
             });
             String::new()
         }
-        Err(e) => {
-            let _ = std::fs::remove_file(&rdp_path);
-            e
-        }
+        Err(e) => e,
     }
 }
 
