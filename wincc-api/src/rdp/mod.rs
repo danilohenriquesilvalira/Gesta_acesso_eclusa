@@ -71,34 +71,43 @@ pub async fn rdp_poll_loop(state: Shared) {
                 new_info.nao_autorizado = nao_autorizado;
                 st.rdp.insert(cliente.clone(), new_info);
 
-                // Auto-limpa sessão e supervisões quando RDP fica livre mas sessão ficou presa
+                // Auto-limpa sessão presa: só actua se o RDP está verificado, livre,
+                // E a sessão tem mais de 30s (evita limpar durante o arranque do mstsc)
                 if !info.ocupado && info.verificado {
-                    match cliente.as_str() {
-                        "cliente1" => {
-                            if st.sessoes.cliente1.conectado {
-                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente1.operador, "Sessão auto-encerrada — RDP já livre");
-                                st.sessoes.cliente1.conectado        = false;
-                                st.sessoes.cliente1.operador         = String::new();
-                                st.sessoes.cliente1.timestamp_inicio = String::new();
+                    let (sessao, sups) = match cliente.as_str() {
+                        "cliente1" => (&st.sessoes.cliente1, &st.supervisoes.cliente1),
+                        "cliente2" => (&st.sessoes.cliente2, &st.supervisoes.cliente2),
+                        _          => continue,
+                    };
+                    let sessao_velha = sessao.conectado && !sessao.timestamp_inicio.is_empty() && {
+                        chrono::DateTime::parse_from_str(
+                            &format!("{} +0000", sessao.timestamp_inicio),
+                            "%Y-%m-%d %H:%M:%S %z"
+                        ).map(|t| chrono::Utc::now().signed_duration_since(t).num_seconds() > 30)
+                        .unwrap_or(false)
+                    };
+                    let sups_vazias = sups.is_empty();
+                    drop(sessao); drop(sups);
+
+                    if sessao_velha {
+                        match cliente.as_str() {
+                            "cliente1" => {
+                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente1.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
+                                st.sessoes.cliente1 = Default::default();
                             }
-                            if !st.supervisoes.cliente1.is_empty() {
-                                tracing::info!(cliente = %cliente, "Supervisão auto-encerrada — sessão RDP libertada");
-                                st.supervisoes.cliente1.clear();
+                            "cliente2" => {
+                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente2.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
+                                st.sessoes.cliente2 = Default::default();
                             }
+                            _ => {}
                         }
-                        "cliente2" => {
-                            if st.sessoes.cliente2.conectado {
-                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente2.operador, "Sessão auto-encerrada — RDP já livre");
-                                st.sessoes.cliente2.conectado        = false;
-                                st.sessoes.cliente2.operador         = String::new();
-                                st.sessoes.cliente2.timestamp_inicio = String::new();
-                            }
-                            if !st.supervisoes.cliente2.is_empty() {
-                                tracing::info!(cliente = %cliente, "Supervisão auto-encerrada — sessão RDP libertada");
-                                st.supervisoes.cliente2.clear();
-                            }
+                    }
+                    if !sups_vazias {
+                        match cliente.as_str() {
+                            "cliente1" => { st.supervisoes.cliente1.clear(); }
+                            "cliente2" => { st.supervisoes.cliente2.clear(); }
+                            _ => {}
                         }
-                        _ => continue,
                     }
                 }
 
