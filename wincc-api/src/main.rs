@@ -36,6 +36,7 @@ use handlers::{
         update_usuario,
     },
 };
+use handlers::misc::{heartbeat, wincc_status};
 use rdp::rdp_poll_loop;
 use state::AppState;
 
@@ -79,6 +80,40 @@ async fn shutdown_signal() {
     ctrl_c.await;
 }
 
+// ── Watchdog: marca windows_vivo=false se heartbeat parar há mais de 5s ──────
+
+async fn servidor_health_watchdog(state: state::Shared) {
+    const TIMEOUT_SECS: u64 = 5;
+    loop {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+
+        let heartbeats = state.heartbeats.read().await.clone();
+        let mut st     = state.inner.write().await;
+        let mut mudou  = false;
+
+        for (srv, health) in st.servidor_health.iter_mut() {
+            let hb_ok = heartbeats.get(srv)
+                .map(|t| t.elapsed().as_secs() < TIMEOUT_SECS)
+                .unwrap_or(false);
+
+            if health.windows_vivo != hb_ok {
+                health.windows_vivo = hb_ok;
+                if !hb_ok { health.wincc_vivo = false; } // se Windows morreu, WinCC também
+                mudou = true;
+                if hb_ok {
+                    tracing::info!(servidor = %srv, "Servidor ONLINE");
+                } else {
+                    tracing::warn!(servidor = %srv, "Servidor OFFLINE — heartbeat parou");
+                }
+            }
+        }
+
+        if mudou {
+            rdp::broadcast_estado(&st, &state.sse_tx);
+        }
+    }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -116,6 +151,7 @@ async fn main() {
     tokio::spawn(plc::plc_health_loop(state.clone()));
     tokio::spawn(failover::failover_monitor_loop(state.clone()));
     tokio::spawn(cleanup_loop(state.clone()));
+    tokio::spawn(servidor_health_watchdog(state.clone()));
 
     // ── Middleware ────────────────────────────────────────────────────────────
     let cors        = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
@@ -160,6 +196,9 @@ async fn main() {
         .route("/blacklist",                 get(list_blacklist).post(add_blacklist))
         .route("/blacklist/:id",             delete(remove_blacklist))
         .route("/admin/force-logout",        post(admin_force_logout))
+        // ── Heartbeat — wincc-agent em cada Windows Server (sem auth, LAN only) ─
+        .route("/heartbeat/:servidor",        post(heartbeat))
+        .route("/wincc-status/:servidor",    post(wincc_status))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(cors)

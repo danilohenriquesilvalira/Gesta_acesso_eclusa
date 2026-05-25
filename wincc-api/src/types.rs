@@ -73,6 +73,25 @@ pub struct PlcHealth {
 
 pub type PlcHealthMap = HashMap<String, PlcHealth>;
 
+// ── Servidor / WinCC Health ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ServidorHealth {
+    pub servidor:        String,
+    pub ip:              String,
+    pub windows_vivo:    bool,
+    pub wincc_vivo:      bool,
+    pub ultimo_heartbeat: String,
+    pub ultimo_wincc:    String,
+}
+
+pub type ServidorHealthMap = HashMap<String, ServidorHealth>;
+
+#[derive(Debug, Deserialize)]
+pub struct WinccStatusReq {
+    pub vivo: bool,
+}
+
 // ── Request bodies ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]

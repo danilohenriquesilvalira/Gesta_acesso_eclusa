@@ -1,7 +1,10 @@
 # =============================================================================
-#  deploy.ps1 -- Deploy completo para o servidor de producao
+#  deploy.ps1 -- Deploy directo para o servidor (sem git pull)
 #
-#  Uso:  .\deploy.ps1              (git pull + rebuild + restart + limpeza)
+#  Copia os ficheiros wincc-api do PC local para o servidor via SCP,
+#  reconstroi o Docker e reinicia o container.
+#
+#  Uso:  .\deploy.ps1              (copiar + rebuild + restart)
 #        .\deploy.ps1 -VerLogs     (mostra logs do container no final)
 # =============================================================================
 
@@ -18,6 +21,8 @@ $IMAGEM        = "gestao-acessos-edp-wincc-api"
 $DB_URL        = "postgres://eclusa_admin:Rls@2024@gestao-acesso-db:5432/gestao_acesso_eclusa"
 $HOSTKEY       = "SHA256:OzBG/LrAptWHadjm6g17jFJyiPIqnhIJ3h3SOE0JvCg"
 $PLINK         = "C:\Program Files\PuTTY\plink.exe"
+$PSCP          = "C:\Program Files\PuTTY\pscp.exe"
+$LOCAL_API     = "$PSScriptRoot\wincc-api"
 
 function Passo  { param($msg) Write-Host ""; Write-Host "  >> $msg" -ForegroundColor Cyan }
 function Ok     { param($msg) Write-Host "  OK  $msg" -ForegroundColor Green }
@@ -31,6 +36,8 @@ function Invoke-SSH {
 }
 
 if (-not (Test-Path $PLINK)) { Falhou "plink.exe nao encontrado em $PLINK" }
+if (-not (Test-Path $PSCP))  { Falhou "pscp.exe nao encontrado em $PSCP" }
+if (-not (Test-Path $LOCAL_API)) { Falhou "Pasta wincc-api nao encontrada em $LOCAL_API" }
 
 $inicio = Get-Date
 Write-Host ""
@@ -46,10 +53,23 @@ Passo "A verificar ligacao SSH..."
 if ($LASTEXITCODE -ne 0) { Falhou "Nao foi possivel ligar a ${SERVIDOR_USER}@${SERVIDOR_IP}" }
 Ok "Ligacao SSH estabelecida"
 
-# -- 2. Git pull no servidor ---------------------------------------------------
-Passo "A actualizar codigo no servidor (git pull)..."
-Invoke-SSH "cd $SERVIDOR_PATH && git fetch origin && git reset --hard origin/main"
-Ok "Codigo actualizado"
+# -- 2. Copiar ficheiros wincc-api para o servidor via SCP --------------------
+Passo "A copiar wincc-api para o servidor..."
+# Apaga pasta antiga e recria
+Invoke-SSH "rm -rf ${SERVIDOR_PATH}/wincc-api && mkdir -p ${SERVIDOR_PATH}/wincc-api"
+# Copia recursivamente (src/ + Cargo.toml + Cargo.lock + Dockerfile)
+& "$PSCP" -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS -r `
+    "$LOCAL_API\src" `
+    "${SERVIDOR_USER}@${SERVIDOR_IP}:${SERVIDOR_PATH}/wincc-api/"
+if ($LASTEXITCODE -ne 0) { Falhou "Falhou ao copiar src/" }
+
+foreach ($f in @("Cargo.toml", "Cargo.lock", "Dockerfile")) {
+    & "$PSCP" -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS `
+        "$LOCAL_API\$f" `
+        "${SERVIDOR_USER}@${SERVIDOR_IP}:${SERVIDOR_PATH}/wincc-api/$f"
+    if ($LASTEXITCODE -ne 0) { Falhou "Falhou ao copiar $f" }
+}
+Ok "Ficheiros copiados"
 
 # -- 3. Build da imagem Docker -------------------------------------------------
 Passo "A compilar wincc-api (~40s com cache, ~5min primeira vez)..."

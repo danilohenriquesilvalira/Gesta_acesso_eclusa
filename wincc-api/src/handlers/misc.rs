@@ -1,12 +1,66 @@
-use axum::{extract::State, Json};
+use axum::{extract::{Path, State}, http::StatusCode, Json};
 use chrono::Utc;
 use serde_json::Value;
+use std::time::Instant;
 
 use crate::{
     auth::{AdminUser, AuthUser},
+    rdp::broadcast_estado,
     state::Shared,
-    types::{now, OperadorReq},
+    types::{now, OperadorReq, ServidorHealth, WinccStatusReq},
 };
+
+/// POST /heartbeat/:servidor — wincc-agent envia a cada 1s (sem auth, LAN only)
+pub async fn heartbeat(
+    Path(servidor): Path<String>,
+    State(s):       State<Shared>,
+) -> StatusCode {
+    s.heartbeats.write().await.insert(servidor.clone(), Instant::now());
+
+    // Actualiza servidor_health — windows_vivo = true
+    let ip = s.rdp_clients.iter()
+        .find(|c| c.id.eq_ignore_ascii_case(&servidor))
+        .map(|c| c.ip.clone())
+        .unwrap_or_default();
+
+    let mut st = s.inner.write().await;
+    let entry = st.servidor_health.entry(servidor.clone()).or_insert_with(|| ServidorHealth {
+        servidor: servidor.clone(),
+        ip:       ip.clone(),
+        ..Default::default()
+    });
+    entry.windows_vivo     = true;
+    entry.ultimo_heartbeat = now();
+    if entry.ip.is_empty() { entry.ip = ip; }
+
+    broadcast_estado(&st, &s.sse_tx);
+    StatusCode::OK
+}
+
+/// POST /wincc-status/:servidor — wincc-agent envia a cada 3s (sem auth, LAN only)
+pub async fn wincc_status(
+    Path(servidor): Path<String>,
+    State(s):       State<Shared>,
+    Json(req):      Json<WinccStatusReq>,
+) -> StatusCode {
+    let ip = s.rdp_clients.iter()
+        .find(|c| c.id.eq_ignore_ascii_case(&servidor))
+        .map(|c| c.ip.clone())
+        .unwrap_or_default();
+
+    let mut st = s.inner.write().await;
+    let entry = st.servidor_health.entry(servidor.clone()).or_insert_with(|| ServidorHealth {
+        servidor: servidor.clone(),
+        ip:       ip.clone(),
+        ..Default::default()
+    });
+    entry.wincc_vivo    = req.vivo;
+    entry.ultimo_wincc  = now();
+    if entry.ip.is_empty() { entry.ip = ip; }
+
+    broadcast_estado(&st, &s.sse_tx);
+    StatusCode::OK
+}
 
 /// GET /health — estado do serviço e da base de dados
 pub async fn health(State(s): State<Shared>) -> Json<Value> {

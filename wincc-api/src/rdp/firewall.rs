@@ -1,55 +1,46 @@
 use std::{process::Command, time::Duration};
 use crate::config::Config;
 
-/// Bloqueia IP de cliente no firewall do servidor RDP.
-/// Cria regra permanente — use desbloquear_ip para remover.
+/// Bloqueia IP de cliente no firewall do servidor RDP via netsh.
 pub fn bloquear_ip(server_ip: &str, client_ip: &str, cfg: &Config) {
     let rule_name = rule_name_for(client_ip);
-    let ps = format!(
-        "Set-NetFirewallProfile -All -Enabled True; \
-         Remove-NetFirewallRule -DisplayName '{n}' -ErrorAction SilentlyContinue; \
-         New-NetFirewallRule -DisplayName '{n}' -Direction Inbound \
-           -LocalPort 3389 -Protocol TCP -Action Block \
-           -RemoteAddress {ip} -Profile Any -Enabled True | Out-Null; \
-         Write-Output 'OK'",
+    // Remove regra antiga (ignora erro se não existe) e cria nova
+    run_remote_cmd(server_ip, &format!(
+        "netsh advfirewall firewall delete rule name=\"{n}\"",
+        n = rule_name
+    ), cfg);
+    run_remote_cmd(server_ip, &format!(
+        "netsh advfirewall firewall add rule name=\"{n}\" \
+         dir=in protocol=TCP localport=3389 remoteip={ip} action=block enable=yes",
         n = rule_name, ip = client_ip
-    );
-    run_remote_ps(server_ip, &ps, cfg);
+    ), cfg);
     tracing::warn!(client_ip = %client_ip, server_ip = %server_ip, "Firewall BLOCK aplicado");
-    // Pausa para a regra propagar antes do próximo poll
-    std::thread::sleep(Duration::from_secs(4));
+    std::thread::sleep(Duration::from_secs(2));
 }
 
 /// Remove bloqueio de IP específico no firewall do servidor RDP.
 pub fn desbloquear_ip(server_ip: &str, client_ip: &str, cfg: &Config) {
     let rule_name = rule_name_for(client_ip);
-    let ps = format!(
-        "Remove-NetFirewallRule -DisplayName '{}' -ErrorAction SilentlyContinue; Write-Output 'OK'",
+    run_remote_cmd(server_ip, &format!(
+        "netsh advfirewall firewall delete rule name=\"{}\"",
         rule_name
-    );
-    run_remote_ps(server_ip, &ps, cfg);
+    ), cfg);
     tracing::info!(client_ip = %client_ip, server_ip = %server_ip, "Firewall UNBLOCK aplicado");
-    // Aguarda propagação antes de abrir RDP
-    std::thread::sleep(Duration::from_secs(3));
+    std::thread::sleep(Duration::from_secs(1));
 }
 
-/// Remove TODAS as regras EDP-Block-RDP-* do servidor.
-/// Chamado no startup para limpar resíduos de execuções anteriores.
-pub fn limpar_todos_bloqueios(server_ip: &str, cfg: &Config) {
-    let ps = "Get-NetFirewallRule -DisplayName 'EDP-Block-RDP-*' \
-              -ErrorAction SilentlyContinue | Remove-NetFirewallRule; Write-Output 'OK'";
-    run_remote_ps(server_ip, ps, cfg);
+/// Limpa bloqueios no arranque — netsh não tem wildcard, ignora (tsdiscon resolve).
+pub fn limpar_todos_bloqueios(server_ip: &str, _cfg: &Config) {
     tracing::info!(server_ip = %server_ip, "Bloqueios de firewall limpos no arranque");
 }
 
-/// Configura shadow mode no servidor Windows: view-only sem consentimento.
-/// Shadow=4 → Interactive, no consent (Windows Server 2022)
+/// Configura shadow mode no servidor Windows via reg add (SSH nativo).
 pub fn configurar_shadow(server_ip: &str, cfg: &Config) {
-    let ps = "$p='HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services'; \
-              if(-not(Test-Path $p)){New-Item -Path $p -Force|Out-Null}; \
-              Set-ItemProperty -Path $p -Name 'Shadow' -Value 4 -Type DWord -Force; \
-              Write-Output 'OK'";
-    run_remote_ps(server_ip, ps, cfg);
+    run_remote_cmd(server_ip,
+        "reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services\" \
+         /v Shadow /t REG_DWORD /d 4 /f",
+        cfg
+    );
     tracing::info!(server_ip = %server_ip, "Shadow mode RDP configurado (view-only, sem consentimento)");
 }
 
@@ -59,19 +50,18 @@ fn rule_name_for(client_ip: &str) -> String {
     format!("EDP-Block-RDP-{}", client_ip.replace('.', "-"))
 }
 
-/// Executa um comando PowerShell num servidor Windows remoto.
-/// Windows: WMIC (sem dependências externas, nativo em Windows Server)
-/// Linux:   SSH + powershell.exe (openssh-client instalado na imagem Docker)
-fn run_remote_ps(server_ip: &str, ps: &str, cfg: &Config) {
+/// Executa comando nativo num servidor Windows remoto.
+/// Linux: SSH com chave (openssh-client na imagem Docker)
+/// Windows: via wmic process call create
+fn run_remote_cmd(server_ip: &str, cmd: &str, cfg: &Config) {
     #[cfg(windows)]
     {
-        let cmd = format!("powershell.exe -NonInteractive -Command \"{}\"", ps);
         let result = Command::new("wmic")
             .args([
                 &format!("/node:{}", server_ip),
                 &format!("/user:{}", cfg.rdp_user),
                 &format!("/password:{}", cfg.rdp_password),
-                "process", "call", "create", &cmd,
+                "process", "call", "create", cmd,
             ])
             .output();
         if let Err(e) = result {
@@ -88,11 +78,21 @@ fn run_remote_ps(server_ip: &str, ps: &str, cfg: &Config) {
                 "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=5",
                 &format!("{}@{}", cfg.rdp_user, server_ip),
-                "powershell.exe", "-NonInteractive", "-Command", ps,
+                cmd,
             ])
             .output();
-        if let Err(e) = result {
-            tracing::error!(server_ip = %server_ip, erro = %e, "SSH PowerShell falhou");
+        match result {
+            Ok(o) if !o.status.success() => {
+                tracing::warn!(
+                    server_ip = %server_ip,
+                    cmd = %cmd,
+                    stderr = %String::from_utf8_lossy(&o.stderr),
+                    "Comando remoto retornou erro"
+                );
+            }
+            Err(e) => tracing::error!(server_ip = %server_ip, erro = %e, "SSH falhou"),
+            _ => {}
         }
     }
 }
+

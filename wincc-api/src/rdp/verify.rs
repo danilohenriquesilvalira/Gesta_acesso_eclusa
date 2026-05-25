@@ -30,27 +30,63 @@ fn verificar_rdp_impl(ip: &str, _cfg: &Config) -> RdpInfo {
 #[cfg(not(windows))]
 fn verificar_rdp_impl(ip: &str, cfg: &Config) -> RdpInfo {
     use std::process::Command;
-    match Command::new("ssh")
+    use std::time::Duration;
+
+    // TCP connect à porta 3389 — TermService fecha cedo no shutdown,
+    // muito antes do SSH bloquear. Timeout 1s é suficiente.
+    let rdp_port_ok = std::net::TcpStream::connect_timeout(
+        &format!("{}:3389", ip).parse().unwrap_or("0.0.0.0:3389".parse().unwrap()),
+        Duration::from_secs(1),
+    ).is_ok();
+
+    if !rdp_port_ok {
+        return RdpInfo { verificado: false, timestamp: now(), ..Default::default() };
+    }
+
+    let mut child = match Command::new("ssh")
         .args([
             "-i", &cfg.ssh_key_path,
             "-p", &cfg.ssh_port.to_string(),
             "-o", "StrictHostKeyChecking=no",
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=3",
+            "-o", "ServerAliveInterval=2",
+            "-o", "ServerAliveCountMax=1",
             &format!("{}@{}", cfg.rdp_user, ip),
             "qwinsta",
         ])
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
     {
-        Ok(out) => {
-            if !out.status.success() {
-                return RdpInfo { verificado: false, timestamp: now(), ..Default::default() };
+        Ok(c)  => c,
+        Err(_) => return RdpInfo { verificado: false, timestamp: now(), ..Default::default() },
+    };
+
+    // Timeout total de 4s — evita bloquear o poll quando o servidor está em shutdown
+    // e o TCP aceita ligação mas o SSH fica pendurado à espera do qwinsta
+    let timeout = Duration::from_secs(4);
+    let start   = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let out = child.wait_with_output().unwrap_or_else(|_| std::process::Output { status: status, stdout: vec![], stderr: vec![] });
+                if !status.success() {
+                    return RdpInfo { verificado: false, timestamp: now(), ..Default::default() };
+                }
+                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                let (ocupado, utilizador, nome_sessao, sessao_id) = parse_qwinsta(&stdout);
+                return RdpInfo { ocupado, utilizador, verificado: true, timestamp: now(), nome_sessao, sessao_id, ..Default::default() };
             }
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            let (ocupado, utilizador, nome_sessao, sessao_id) = parse_qwinsta(&stdout);
-            RdpInfo { ocupado, utilizador, verificado: true, timestamp: now(), nome_sessao, sessao_id, ..Default::default() }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    return RdpInfo { verificado: false, timestamp: now(), ..Default::default() };
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(_) => return RdpInfo { verificado: false, timestamp: now(), ..Default::default() },
         }
-        Err(_) => RdpInfo { verificado: false, timestamp: now(), ..Default::default() },
     }
 }
 
@@ -108,24 +144,63 @@ pub fn obter_ip_cliente_rdp(server_ip: &str, session_id: u32, _cfg: &Config) -> 
 }
 
 #[cfg(not(windows))]
-pub fn obter_ip_cliente_rdp(server_ip: &str, session_id: u32, cfg: &Config) -> Option<String> {
+pub fn obter_ip_cliente_rdp(server_ip: &str, _session_id: u32, cfg: &Config) -> Option<String> {
     use std::process::Command;
-    // C:\wincc-api\get_client_ip.ps1 criado pelo setup_windows_server_2022.ps1
-    let output = Command::new("ssh")
+    use std::time::Duration;
+
+    // netstat -n como string única — SSH nativo do Windows Server não aceita args separados
+    let mut child = Command::new("ssh")
         .args([
             "-i", &cfg.ssh_key_path,
             "-p", &cfg.ssh_port.to_string(),
             "-o", "StrictHostKeyChecking=no",
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=5",
+            "-o", "ServerAliveInterval=2",
+            "-o", "ServerAliveCountMax=1",
             &format!("{}@{}", cfg.rdp_user, server_ip),
-            "powershell.exe", "-NonInteractive", "-File",
-            "C:\\wincc-api\\get_client_ip.ps1",
-            &session_id.to_string(),
+            "netstat -n",
         ])
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
         .ok()?;
-    if !output.status.success() { return None; }
-    let ip = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if ip.is_empty() || ip == "0.0.0.0" { None } else { Some(ip) }
+
+    // Timeout de 5s
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {
+                if start.elapsed() >= Duration::from_secs(5) {
+                    let _ = child.kill();
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(_) => { let _ = child.kill(); return None; }
+        }
+    }
+
+    let out = child.wait_with_output().ok()?;
+    if !out.status.success() { return None; }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    // Linha Windows: TCP    172.29.164.13:3389    172.29.164.100:54321    ESTABLISHED
+    for line in stdout.lines() {
+        let line = line.trim();
+        if !line.contains(":3389") || !line.contains("ESTABLISHED") { continue; }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        // ["TCP", "server:3389", "client:port", "ESTABLISHED"]
+        if parts.len() < 4 { continue; }
+        // Confirmar que é a porta local 3389 (não o lado remoto)
+        if !parts[1].ends_with(":3389") { continue; }
+        let remote = parts[2]; // "client_ip:port"
+        if let Some(ip) = remote.rsplit_once(':').map(|(ip, _)| ip) {
+            if !ip.is_empty() && ip != "0.0.0.0" && ip != server_ip {
+                return Some(ip.to_string());
+            }
+        }
+    }
+    None
 }

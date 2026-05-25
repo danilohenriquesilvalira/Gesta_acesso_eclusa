@@ -136,18 +136,17 @@ export function useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLog
   // ── Failover automático — servidor caiu, reconectar no reserva ─────────────
 
   const handleFailover = useCallback(async (cliente: ClienteKey, ipNovoServidor: string) => {
-    // Fecha mstsc atual silenciosamente
+    if (!username) return;
+
     try { await invoke("fechar_rdp"); } catch { /* já fechou */ }
 
-    // Pequena pausa para o mstsc terminar
     await new Promise(r => setTimeout(r, 1500));
 
-    // Abre novo RDP no servidor reserva
     const msg = await invoke<string>("connect_rdp", { ip: ipNovoServidor, cliente }).catch(String);
     if (msg) setErro(`Failover: ${msg}`);
 
     fetchEstado();
-  }, [fetchEstado]);
+  }, [fetchEstado, username]);
 
   // Exposto para o App passar ao useEstado como callback de failover SSE
   const onFailoverSse = useCallback((p: { cliente: string; ip_reserva: string }) => {

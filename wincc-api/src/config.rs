@@ -86,6 +86,21 @@ pub fn load_rdp_clients() -> Vec<RdpClient> {
     ]
 }
 
+/// Servidores Windows conhecidos — cada um corre wincc-agent.
+/// IDs coincidem com o campo "servidor" no config.json do agente.
+pub fn load_servidores() -> Vec<RdpClient> {
+    vec![
+        RdpClient { id: "RG".into(),       ip: std::env::var("SRV_RG_IP").unwrap_or_else(|_| "172.29.164.13".into()) },
+        RdpClient { id: "PN".into(),       ip: std::env::var("SRV_PN_IP").unwrap_or_else(|_| "172.29.164.14".into()) },
+        RdpClient { id: "Reserva01".into(),ip: std::env::var("SRV_R1_IP").unwrap_or_else(|_| "172.29.164.15".into()) },
+        RdpClient { id: "Reserva02".into(),ip: std::env::var("SRV_R2_IP").unwrap_or_else(|_| "172.29.164.16".into()) },
+        RdpClient { id: "Reserva03".into(),ip: std::env::var("SRV_R3_IP").unwrap_or_else(|_| "172.29.164.17".into()) },
+        RdpClient { id: "CL".into(),       ip: std::env::var("SRV_CL_IP").unwrap_or_else(|_| "172.29.164.18".into()) },
+        RdpClient { id: "CM".into(),       ip: std::env::var("SRV_CM_IP").unwrap_or_else(|_| "172.29.164.19".into()) },
+        RdpClient { id: "VR".into(),       ip: std::env::var("SRV_VR_IP").unwrap_or_else(|_| "172.29.164.20".into()) },
+    ]
+}
+
 // ── PLCs configurados ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]

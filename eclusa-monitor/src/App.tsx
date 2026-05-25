@@ -30,22 +30,24 @@ const ECLUSA_KEYS = ["IND1", "IND2", "RG", "IND4", "PN"] as const;
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [pagina,      setPagina]      = useState<Pagina>("dashboard");
-  const [loginAberto, setLoginAberto] = useState(false);
-  const [apiUrl,      setApiUrl]      = useState(DEFAULT_API);
-  const [ipCliente1,  setIpCliente1]  = useState("172.29.164.13");
-  const [ipCliente2,  setIpCliente2]  = useState("172.29.164.14");
-  const [ipReserva,   setIpReserva]   = useState("172.29.164.15");
+  const [pagina,        setPagina]        = useState<Pagina>("dashboard");
+  const [loginAberto,   setLoginAberto]   = useState(false);
+  const [apiUrl,        setApiUrl]        = useState(DEFAULT_API);
+  const [ipCliente1,    setIpCliente1]    = useState("172.29.164.13");
+  const [ipCliente2,    setIpCliente2]    = useState("172.29.164.14");
+  const [ipReserva,     setIpReserva]     = useState("172.29.164.15");
+  const [failoverInfo,  setFailoverInfo]  = useState<{ cliente: string; ip_reserva: string } | null>(null);
 
   const { username, token, isAdmin, login, logout } = useAuth();
 
   // onFailoverSse via ref — quebra dependência circular useRdp ↔ useEstado
   const onFailoverRef = useRef<((p: { cliente: string; ip_reserva: string }) => void) | undefined>(undefined);
   const onFailoverStable = useCallback((p: { cliente: string; ip_reserva: string }) => {
+    setFailoverInfo(p);
     onFailoverRef.current?.(p);
   }, []);
 
-  const { estado, apiOk, fetchEstado } = useEstado(apiUrl, onFailoverStable);
+  const { estado, apiOk, fetchEstado } = useEstado(apiUrl, ipReserva, onFailoverStable);
 
   const {
     conectando, emSupervisao, erro, setErro,
@@ -156,6 +158,8 @@ export default function App() {
 
   // ── Diálogos e erros (partilhados) ────────────────────────────────────────────
 
+  const nomeCliente = failoverInfo?.cliente === "cliente1" ? "RG" : failoverInfo?.cliente === "cliente2" ? "PN" : failoverInfo?.cliente ?? "";
+
   const dialogs = (
     <>
       <LoginDialog isOpen={loginAberto} canClose={true} apiUrl={apiUrl}
@@ -168,6 +172,32 @@ export default function App() {
           <span className="text-base">&#9888;</span>
           {erro}
           <span className="ml-2 text-[#E32C2C]/50 font-mono text-xs">&#x2715;</span>
+        </div>
+      )}
+      {failoverInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}>
+          <div className="bg-[#1a2435] border border-[#E32C2C]/40 rounded-3xl shadow-2xl px-10 py-8 flex flex-col items-center gap-5 max-w-sm w-full mx-4">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "rgba(227,44,44,0.15)" }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E32C2C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-white font-black text-xl mb-1">Servidor Inacessível</p>
+              <p className="text-white/50 text-sm">Servidor <span className="text-white font-bold">{nomeCliente}</span> caiu — a redirecionar para servidor reserva</p>
+              <p className="text-[#28FF52] font-mono font-bold text-sm mt-2">{failoverInfo.ip_reserva}</p>
+            </div>
+            <div className="flex items-center gap-2 text-white/40 text-xs">
+              <div className="w-4 h-4 border-2 border-white/20 border-t-[#28FF52] rounded-full animate-spin" />
+              A ligar ao servidor reserva...
+            </div>
+            <button
+              onClick={() => setFailoverInfo(null)}
+              className="text-white/30 text-xs hover:text-white/60 transition-colors cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
         </div>
       )}
     </>

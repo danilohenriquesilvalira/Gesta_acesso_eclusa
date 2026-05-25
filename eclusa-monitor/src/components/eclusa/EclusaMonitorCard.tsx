@@ -15,7 +15,7 @@ interface Props {
 }
 
 export default function EclusaMonitorCard({
-  nome, eclusa, ehAdmin, backendOnline, servidorAcessivel, sessaoAtiva, emSupervisao,
+  nome, eclusa, backendOnline, servidorAcessivel, sessaoAtiva, emSupervisao,
   supervisoesAtivas, utilizadorAtual, onSupervisao, onSairSupervisao,
 }: Props) {
   if (nome.startsWith("IND")) {

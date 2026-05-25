@@ -9,7 +9,7 @@ use std::net::SocketAddr;
 use crate::{
     auth::{hash_password, make_token, verify_password, AdminUser, AuthUser},
     db::audit::{log_evento, log_evento_bg, log_evento_com_ip},
-    rdp::broadcast_estado,
+    rdp::{broadcast_estado, desbloquear_ip_firewall, firewall::bloquear_ip},
     state::Shared,
     types::{BlacklistReq, CreateUserReq, ForceLogoutReq, LoginReq, UpdateUserReq},
 };
@@ -453,6 +453,17 @@ pub async fn add_blacklist(
                 log_evento(&db, "blacklist_adicionado",
                     &format!("IP '{}' bloqueado — motivo: {} — por '{}'", ip, mot, quem)).await;
             });
+
+            // Aplicar regra no firewall de TODOS os servidores RDP
+            let cfg     = s.cfg.clone();
+            let ip_bl   = req.ip.clone();
+            let servers: Vec<String> = s.rdp_clients.iter().map(|c| c.ip.clone()).collect();
+            tokio::task::spawn_blocking(move || {
+                for srv in servers {
+                    bloquear_ip(&srv, &ip_bl, &cfg);
+                }
+            });
+
             Json(serde_json::json!({"ok": true}))
         }
         Err(e) => Json(serde_json::json!({"ok": false, "erro": format!("Erro DB: {}", e)})),
@@ -469,6 +480,11 @@ pub async fn remove_blacklist(
         "SELECT id FROM users WHERE username = $1"
     ).bind(&admin.0.username).fetch_optional(&s.db).await.ok().flatten();
 
+    // Obter o IP antes de marcar como inactivo — necessário para remover firewall
+    let ip_entry: Option<String> = sqlx::query_scalar(
+        "SELECT ip::text FROM ip_blacklist WHERE id = $1 AND active = TRUE"
+    ).bind(id).fetch_optional(&s.db).await.ok().flatten();
+
     match sqlx::query(
         "UPDATE ip_blacklist SET active = FALSE, removed_at = NOW(), removed_by = $1 WHERE id = $2"
     )
@@ -481,6 +497,18 @@ pub async fn remove_blacklist(
                 log_evento(&db, "blacklist_removido",
                     &format!("Bloqueio de IP (id={}) levantado — por '{}'", id, quem)).await;
             });
+
+            // Remover regra do firewall de TODOS os servidores RDP
+            if let Some(ip_bl) = ip_entry {
+                let cfg     = s.cfg.clone();
+                let servers: Vec<String> = s.rdp_clients.iter().map(|c| c.ip.clone()).collect();
+                tokio::task::spawn_blocking(move || {
+                    for srv in servers {
+                        desbloquear_ip_firewall(&srv, &ip_bl, &cfg);
+                    }
+                });
+            }
+
             Json(serde_json::json!({"ok": true}))
         }
         Ok(_)  => Json(serde_json::json!({"ok": false, "erro": "Não encontrado"})),

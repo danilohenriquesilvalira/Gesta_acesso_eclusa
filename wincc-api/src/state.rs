@@ -2,8 +2,8 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::sync::{broadcast, RwLock};
 
 use crate::{
-    config::{load_rdp_clients, Config, RdpClient},
-    types::{PlcHealthMap, RdpMap, Sessoes, Supervisoes},
+    config::{load_rdp_clients, load_servidores, Config, RdpClient},
+    types::{PlcHealthMap, RdpMap, ServidorHealth, ServidorHealthMap, Sessoes, Supervisoes},
 };
 use sqlx::PgPool;
 
@@ -22,7 +22,8 @@ pub struct AppStateInner {
     pub startup:     Option<Instant>,
     /// Estado das eclusas em memória — atualizado pelo WinCC via POST /eclusas/:id/estado.
     /// Persiste em disco em background; nunca lê do disco em runtime.
-    pub eclusas:     serde_json::Value,
+    pub eclusas:          serde_json::Value,
+    pub servidor_health:  ServidorHealthMap,
 }
 
 // ── Outer AppState — database pool and channels are already thread-safe ────────
@@ -45,6 +46,8 @@ pub struct AppState {
     /// In-memory JTI revocation cache: jti → expiry unix timestamp.
     /// Avoids DB query on every authenticated request for the common case.
     pub revoked_jtis: RwLock<HashMap<String, i64>>,
+    /// Ultimo heartbeat recebido por cliente (wincc-agent instalado em cada Windows Server)
+    pub heartbeats: RwLock<HashMap<String, Instant>>,
 }
 
 impl AppState {
@@ -55,6 +58,19 @@ impl AppState {
         eclusas:  serde_json::Value,
     ) -> Arc<Self> {
         let rdp_clients = load_rdp_clients();
+
+        // Inicializa servidor_health com todos os servidores conhecidos (todos offline até heartbeat)
+        let servidor_health: ServidorHealthMap = load_servidores()
+            .into_iter()
+            .map(|s| (s.id.clone(), ServidorHealth {
+                servidor:         s.id.clone(),
+                ip:               s.ip,
+                windows_vivo:     false,
+                wincc_vivo:       false,
+                ultimo_heartbeat: String::new(),
+                ultimo_wincc:     String::new(),
+            }))
+            .collect();
 
         let (sse_tx, _) = broadcast::channel::<String>(256);
 
@@ -70,6 +86,7 @@ impl AppState {
                 operadores,
                 startup: Some(Instant::now()),
                 eclusas,
+                servidor_health,
                 ..Default::default()
             }),
             db,
@@ -79,6 +96,7 @@ impl AppState {
             cfg,
             force_logout:  RwLock::new(HashMap::new()),
             revoked_jtis:  RwLock::new(HashMap::new()),
+            heartbeats:    RwLock::new(HashMap::new()),
         })
     }
 
