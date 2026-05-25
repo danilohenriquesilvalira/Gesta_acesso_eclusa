@@ -12,7 +12,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            api_url:      "http://172.29.164.10:8080".to_string(),
+            api_url:      "http://172.29.164.12:8080".to_string(),
             rdp_user:     "Administrator".to_string(),
             rdp_password: String::new(),
             ip_cliente1:  "172.29.164.49".to_string(),
