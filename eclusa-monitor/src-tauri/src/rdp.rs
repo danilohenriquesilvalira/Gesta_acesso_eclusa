@@ -156,8 +156,8 @@ pub fn connect_shadow(
             .output();
     }
 
-    // /multimon: cada monitor físico fica com um ecrã completo (igual ao RDP normal)
-    let cmdline = format!("mstsc /shadow:{sessaoId} /v:{ip} /noConsentPrompt /multimon");
+    // /f: fullscreen no monitor principal (shadow não suporta /multimon nativamente)
+    let cmdline = format!("mstsc /shadow:{sessaoId} /v:{ip} /noConsentPrompt /f");
 
     match mstsc_com_credenciais(&cmdline, &cfg.rdp_user, &cfg.rdp_password, &ip) {
         Ok((pid, handle)) => {

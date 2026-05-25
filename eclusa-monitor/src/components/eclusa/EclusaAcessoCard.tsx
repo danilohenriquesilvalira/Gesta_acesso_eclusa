@@ -70,11 +70,11 @@ export default function EclusaAcessoCard({
     : "Disponível";
 
   const tempo = useMemo(() => {
-    if (!rdp.ocupado || !sessao.timestamp_inicio) return null;
-    const d = new Date(sessao.timestamp_inicio.replace(" ", "T"));
+    if (!sessao.conectado || !sessao.timestamp_inicio) return null;
+    const d = new Date(sessao.timestamp_inicio.replace(" ", "T") + "Z");
     if (isNaN(d.getTime())) return null;
     return formatDur(Math.max(0, Math.floor((agora.getTime() - d.getTime()) / 1000)));
-  }, [sessao.timestamp_inicio, agora, rdp.ocupado]);
+  }, [sessao.timestamp_inicio, sessao.conectado, agora]);
 
   return (
     <div
