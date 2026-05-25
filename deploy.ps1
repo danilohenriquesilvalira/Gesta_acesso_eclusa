@@ -1,8 +1,8 @@
 # =============================================================================
-#  deploy.ps1 -- Deploy para o servidor de producao
+#  deploy.ps1 -- Deploy completo para o servidor de producao
 #
-#  Uso:  .\deploy.ps1              (git pull + rebuild + restart)
-#        .\deploy.ps1 -VerLogs     (mostra logs no final)
+#  Uso:  .\deploy.ps1              (git pull + rebuild + restart + limpeza)
+#        .\deploy.ps1 -VerLogs     (mostra logs do container no final)
 # =============================================================================
 
 param(
@@ -15,9 +15,9 @@ $SERVIDOR_PASS = "Rls@2024"
 $SERVIDOR_PATH = "/home/rls/gestao-acessos-edp"
 $REDE_DOCKER   = "gestao-acessos-edp_gestao_acesso_net"
 $IMAGEM        = "gestao-acessos-edp-wincc-api"
+$DB_URL        = "postgres://eclusa_admin:Rls@2024@gestao-acesso-db:5432/gestao_acesso_eclusa"
 $HOSTKEY       = "SHA256:OzBG/LrAptWHadjm6g17jFJyiPIqnhIJ3h3SOE0JvCg"
-
-$PLINK = "C:\Program Files\PuTTY\plink.exe"
+$PLINK         = "C:\Program Files\PuTTY\plink.exe"
 
 function Passo  { param($msg) Write-Host ""; Write-Host "  >> $msg" -ForegroundColor Cyan }
 function Ok     { param($msg) Write-Host "  OK  $msg" -ForegroundColor Green }
@@ -47,37 +47,41 @@ if ($LASTEXITCODE -ne 0) { Falhou "Nao foi possivel ligar a ${SERVIDOR_USER}@${S
 Ok "Ligacao SSH estabelecida"
 
 # -- 2. Git pull no servidor ---------------------------------------------------
-Passo "A fazer git pull no servidor..."
-Invoke-SSH "cd $SERVIDOR_PATH && git pull"
+Passo "A actualizar codigo no servidor (git pull)..."
+Invoke-SSH "cd $SERVIDOR_PATH && git fetch origin && git reset --hard origin/main"
 Ok "Codigo actualizado"
 
 # -- 3. Build da imagem Docker -------------------------------------------------
-Passo "A compilar wincc-api (30-60s se so mudaste .rs)..."
+Passo "A compilar wincc-api (~40s com cache, ~5min primeira vez)..."
 Invoke-SSH "cd $SERVIDOR_PATH && docker build -t $IMAGEM ./wincc-api"
 Ok "Imagem compilada"
 
-# -- 4. Reiniciar container ----------------------------------------------------
-Passo "A reiniciar container..."
-& "$PLINK" -ssh -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "docker rm -f wincc-api 2>/dev/null; true" | Out-Null
-Invoke-SSH "docker run -d --name wincc-api --restart unless-stopped --network $REDE_DOCKER -p 8080:8080 --env-file $SERVIDOR_PATH/.env -e DATABASE_URL=postgres://eclusa_admin:Rls@2024@gestao-acesso-db:5432/gestao_acesso_eclusa $IMAGEM"
-Ok "Container reiniciado"
+# -- 4. Parar e remover container antigo --------------------------------------
+Passo "A parar container antigo..."
+& "$PLINK" -ssh -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "docker rm -f wincc-api 2>/dev/null || true" | Out-Null
+Ok "Container antigo removido"
 
-# -- 5. Health check -----------------------------------------------------------
+# -- 5. Iniciar novo container -------------------------------------------------
+Passo "A iniciar novo container..."
+Invoke-SSH "docker run -d --name wincc-api --restart unless-stopped --network $REDE_DOCKER -p 8080:8080 --env-file $SERVIDOR_PATH/.env -e DATABASE_URL=$DB_URL $IMAGEM"
+Ok "Container iniciado"
+
+# -- 6. Health check -----------------------------------------------------------
 Passo "A aguardar arranque (3s)..."
 Start-Sleep -Seconds 3
 $health = & "$PLINK" -ssh -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "curl -sf http://localhost:8080/health || echo FALHOU" 2>&1
 if ($health -match "FALHOU") {
-    Aviso "Health check nao respondeu -- verifica com: .\deploy.ps1 -VerLogs"
+    Aviso "Health check falhou -- corre: .\deploy.ps1 -VerLogs"
 } else {
     Ok "API online: $health"
 }
 
-# -- 6. Limpeza de imagens Docker antigas -------------------------------------
-Passo "A limpar imagens Docker antigas..."
+# -- 7. Limpeza de imagens Docker antigas -------------------------------------
+Passo "A limpar imagens antigas..."
 & "$PLINK" -ssh -batch -hostkey $HOSTKEY -pw $SERVIDOR_PASS "${SERVIDOR_USER}@${SERVIDOR_IP}" "docker image prune -f" | Out-Null
-Ok "Limpeza concluida"
+Ok "Servidor limpo"
 
-# -- 7. Logs (opcional) --------------------------------------------------------
+# -- 8. Logs (opcional) --------------------------------------------------------
 if ($VerLogs) {
     Write-Host ""
     Write-Host "  -- Ultimas 50 linhas de log --" -ForegroundColor DarkCyan
