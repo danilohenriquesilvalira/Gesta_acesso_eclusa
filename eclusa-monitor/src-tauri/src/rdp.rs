@@ -104,7 +104,7 @@ pub fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String
             .output();
     }
 
-    match Command::new("mstsc").args([&format!("/v:{ip}"), "/multimon", "/f"]).spawn() {
+    match Command::new("mstsc").args([&format!("/v:{ip}"), "/f"]).spawn() {
         Ok(mut child) => {
             std::thread::spawn(move || {
                 let _ = child.wait();
@@ -156,7 +156,6 @@ pub fn connect_shadow(
             .output();
     }
 
-    // /f: fullscreen no monitor principal (shadow não suporta /multimon nativamente)
     let cmdline = format!("mstsc /shadow:{sessaoId} /v:{ip} /noConsentPrompt /f");
 
     match mstsc_com_credenciais(&cmdline, &cfg.rdp_user, &cfg.rdp_password, &ip) {
