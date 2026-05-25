@@ -31,16 +31,14 @@ fn mstsc_com_credenciais(cmdline: &str, user: &str, password: &str, domain: &str
 
     let user_w        = wide(user);
     let pass_w        = wide(password);
-    let domain_w      = wide(domain); // IP do servidor destino (workgroup)
+    let domain_w      = wide(domain);
     let app_w         = wide("C:\\Windows\\System32\\mstsc.exe");
     let mut cmd_w     = wide(cmdline);
-    let mut desktop_w = wide("WinSta0\\Default"); // desktop interactivo do utilizador
+    let mut desktop_w = wide("WinSta0\\Default");
 
     let mut si: STARTUPINFOW = unsafe { std::mem::zeroed() };
     si.cb        = std::mem::size_of::<STARTUPINFOW>() as u32;
     si.lpDesktop = desktop_w.as_mut_ptr();
-    // Sem STARTF_USESHOWWINDOW — deixa o mstsc gerir o tamanho da janela
-    // via /span ou /multimon, sem forçar maximize no monitor primário.
     let mut pi: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
 
     let ok = unsafe {
@@ -61,7 +59,7 @@ fn mstsc_com_credenciais(cmdline: &str, user: &str, password: &str, domain: &str
 
     if ok != 0 {
         let pid    = pi.dwProcessId;
-        let handle = pi.hProcess as isize; // mantido aberto para WaitForSingleObject
+        let handle = pi.hProcess as isize;
         unsafe { CloseHandle(pi.hThread); }
         Ok((pid, handle))
     } else {
@@ -92,7 +90,6 @@ pub fn configurar_registo_rdp() {
 pub fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String {
     let cfg = load_config();
 
-    // Guardar credenciais nos dois formatos que o NLA/mstsc consulta
     for target in [ip.as_str(), &format!("TERMSRV/{ip}")] {
         let _ = Command::new("cmdkey")
             .creation_flags(CREATE_NO_WINDOW)
@@ -126,7 +123,7 @@ pub fn fechar_rdp() {
 }
 
 /// Abre supervisão shadow (view-only) com o sessao_id fornecido pela API.
-/// Requer política Shadow=4 no servidor destino.
+/// Usa ficheiro .rdp temporário para forçar resolução 1920x1080 — apagado após fecho.
 /// Emite "shadow-fechado" quando a janela é fechada.
 #[tauri::command]
 pub fn connect_shadow(
@@ -143,8 +140,6 @@ pub fn connect_shadow(
         return format!("{cliente}: IP não configurado");
     }
 
-    // Bloqueante: mstsc shadow precisa das credenciais antes do NLA.
-    // Dois formatos porque o shadow pode consultar qualquer um deles.
     for target in [ip.as_str(), &format!("TERMSRV/{ip}")] {
         let _ = Command::new("cmdkey")
             .creation_flags(CREATE_NO_WINDOW)
@@ -156,7 +151,28 @@ pub fn connect_shadow(
             .output();
     }
 
-    let cmdline = format!("mstsc /shadow:{sessaoId} /v:{ip} /noConsentPrompt /f");
+    // Ficheiro .rdp temporário — força resolução 1920x1080 para que o shadow
+    // caiba num monitor mesmo quando a sessão remota usa /multimon (3840x1080).
+    // Apagado automaticamente no thread de espera após o mstsc fechar.
+    let rdp_path = std::env::temp_dir().join(format!("shadow_{sessaoId}.rdp"));
+    let rdp_content = format!(
+        "full address:s:{ip}\r\n\
+         shadow:i:{sessaoId}\r\n\
+         desktopwidth:i:1920\r\n\
+         desktopheight:i:1080\r\n\
+         screen mode id:i:2\r\n\
+         use multimon:i:0\r\n\
+         negotiate security layer:i:1\r\n\
+         authentication level:i:0\r\n"
+    );
+    if let Err(e) = std::fs::write(&rdp_path, rdp_content) {
+        return format!("Erro ao criar ficheiro shadow: {e}");
+    }
+
+    let cmdline = format!(
+        "mstsc {} /shadow:{sessaoId} /v:{ip} /noConsentPrompt /f",
+        rdp_path.display()
+    );
 
     match mstsc_com_credenciais(&cmdline, &cfg.rdp_user, &cfg.rdp_password, &ip) {
         Ok((pid, handle)) => {
@@ -168,11 +184,15 @@ pub fn connect_shadow(
                     WaitForSingleObject(handle as _, u32::MAX);
                     CloseHandle(handle as _);
                 }
+                let _ = std::fs::remove_file(&rdp_path);
                 let _ = app.emit("shadow-fechado", cliente);
             });
             String::new()
         }
-        Err(e) => e,
+        Err(e) => {
+            let _ = std::fs::remove_file(&rdp_path);
+            e
+        }
     }
 }
 
