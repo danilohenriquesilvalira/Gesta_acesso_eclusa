@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import TabelaAdmin, { type ColunaConfig } from "./TabelaAdmin";
 
 interface EntradaBlacklist {
-  id:         number;
-  ip:         string;
-  reason:     string | null;
-  active:     boolean;
-  created_at: string;
+  id:          number;
+  ip:          string;
+  reason:      string | null;
+  servidor_ip: string | null;
+  utilizador:  string | null;
+  active:      boolean;
+  created_at:  string;
 }
 
 // Cache module-level — sobrevive a navegação entre páginas
@@ -18,15 +20,16 @@ type FiltroId = "todos" | "ativas" | "inativas";
 const PER_PAGE = 12;
 
 export default function AdminBlacklist({ apiUrl, token }: Props) {
-  const [lista,    setLista]    = useState<EntradaBlacklist[]>(_cachedBlacklist);
-  const [ip,       setIp]       = useState("");
-  const [reason,   setReason]   = useState("");
-  const [erro,     setErro]     = useState("");
-  const [info,     setInfo]     = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const [pesquisa, setPesquisa] = useState("");
-  const [filtro,   setFiltro]   = useState<FiltroId>("todos");
-  const [page,     setPage]     = useState(1);
+  const [lista,       setLista]       = useState<EntradaBlacklist[]>(_cachedBlacklist);
+  const [ip,          setIp]          = useState("");
+  const [reason,      setReason]      = useState("");
+  const [erro,        setErro]        = useState("");
+  const [info,        setInfo]        = useState("");
+  const [loading,     setLoading]     = useState(false);
+  const [pesquisa,    setPesquisa]    = useState("");
+  const [filtro,      setFiltro]      = useState<FiltroId>("ativas");
+  const [page,        setPage]        = useState(1);
+  const [confirmar,   setConfirmar]   = useState<EntradaBlacklist | null>(null);
 
   const hdrs = () => ({
     "Content-Type": "application/json",
@@ -42,7 +45,12 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
     } catch { /* sem ligação */ }
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    if (!token) return;
+    carregar();
+    const iv = setInterval(carregar, 10_000);
+    return () => clearInterval(iv);
+  }, [token]);
   useEffect(() => { setPage(1); }, [pesquisa, filtro]);
 
   const handleBloquear = async (e: React.FormEvent) => {
@@ -72,13 +80,16 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
     finally  { setLoading(false); }
   };
 
-  const handleLibertar = async (entrada: EntradaBlacklist) => {
-    if (!window.confirm(`Libertar o IP ${entrada.ip}?\nO utilizador voltará a poder fazer login.`)) return;
+  const handleLibertar = (entrada: EntradaBlacklist) => setConfirmar(entrada);
+
+  const confirmarLibertar = async () => {
+    if (!confirmar) return;
     try {
-      const r    = await fetch(`${apiUrl}/blacklist/${entrada.id}`, { method: "DELETE", headers: hdrs() });
+      const r    = await fetch(`${apiUrl}/blacklist/${confirmar.id}`, { method: "DELETE", headers: hdrs() });
       const data = await r.json();
       if (data.ok) carregar();
     } catch { /* sem ligação */ }
+    finally { setConfirmar(null); }
   };
 
   const fmt = (iso: string) => {
@@ -110,36 +121,54 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
 
   const colunas: ColunaConfig<EntradaBlacklist>[] = [
     {
-      header: "Endereço IP",
-      width:  "minmax(0,2fr)",
+      header: "IP Bloqueado",
+      width:  "minmax(0,1.8fr)",
       render: e => (
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: "rgba(33,46,62,0.1)", color: "#212E3E" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: e.active ? "rgba(227,44,44,0.1)" : "rgba(33,46,62,0.08)", color: e.active ? "#E32C2C" : "#7C9599" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
           </div>
           <span className="font-mono font-extrabold text-[13px]"
-            style={{ color: e.active ? "#E32C2C" : "#212E3E" }}>
+            style={{ color: e.active ? "#E32C2C" : "#7C9599" }}>
             {e.ip}
           </span>
         </div>
       ),
     },
     {
-      header: "Motivo",
-      width:  "minmax(0,3fr)",
-      render: e => (
-        <span className="text-[12px] pr-4 truncate block" style={{ color: e.reason ? "#212E3E" : "#BECACC" }}
-          title={e.reason ?? undefined}>
-          {e.reason ?? "Sem motivo registado"}
-        </span>
+      header: "Tentou aceder a",
+      width:  "minmax(0,1.4fr)",
+      render: e => e.servidor_ip ? (
+        <div className="flex items-center gap-1.5">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          <span className="font-mono font-bold text-[12px]" style={{ color: "#F59E0B" }}>{e.servidor_ip}</span>
+        </div>
+      ) : (
+        <span className="text-[11px]" style={{ color: "#BECACC" }}>—</span>
+      ),
+    },
+    {
+      header: "Utilizador usado",
+      width:  "minmax(0,1.4fr)",
+      render: e => e.utilizador ? (
+        <div className="flex items-center gap-1.5">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span className="font-mono text-[12px] font-semibold" style={{ color: "#60A5FA" }}>{e.utilizador}</span>
+        </div>
+      ) : (
+        <span className="text-[11px]" style={{ color: "#BECACC" }}>—</span>
       ),
     },
     {
       header: "Estado",
-      width:  "minmax(0,1.4fr)",
+      width:  "minmax(0,1.2fr)",
       center: true,
       render: e => (
         <span className="flex items-center justify-center gap-1.5 text-[12px] font-bold"
@@ -151,15 +180,15 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
     },
     {
       header: "Data",
-      width:  "minmax(0,1.6fr)",
+      width:  "minmax(0,1.4fr)",
       center: true,
       render: e => (
-        <span className="font-mono text-[12px]" style={{ color: "#212E3E" }}>{fmt(e.created_at)}</span>
+        <span className="font-mono text-[11px]" style={{ color: "#212E3E" }}>{fmt(e.created_at)}</span>
       ),
     },
     {
       header: "Acção",
-      width:  "minmax(0,1.2fr)",
+      width:  "minmax(0,1fr)",
       center: true,
       render: e => e.active ? (
         <button onClick={() => handleLibertar(e)}
@@ -177,6 +206,63 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+
+      {/* ── Dialog de confirmação ─────────────────────────────────────────── */}
+      {confirmar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          onClick={() => setConfirmar(null)}>
+          <div className="rounded-2xl p-6 w-[380px] shadow-2xl"
+            style={{ background: "#1A2535", border: "1px solid rgba(227,44,44,0.3)" }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* Ícone + título */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(34,94,102,0.15)", border: "1px solid rgba(34,94,102,0.3)" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#225E66" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                  <line x1="12" y1="16" x2="12" y2="16.01"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-white font-black text-[15px]">Libertar IP</p>
+                <p className="text-[11px] font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  O acesso RDP será restaurado
+                </p>
+              </div>
+            </div>
+
+            {/* IP destacado */}
+            <div className="rounded-xl px-4 py-3 mb-5"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <p className="text-[10px] font-extrabold uppercase tracking-widest mb-1"
+                style={{ color: "rgba(255,255,255,0.3)" }}>Endereço IP</p>
+              <p className="font-mono font-bold text-[15px] text-white">{confirmar.ip}</p>
+              {confirmar.servidor_ip && (
+                <p className="text-[11px] mt-1 font-mono" style={{ color: "rgba(245,158,11,0.8)" }}>
+                  Tentou aceder a {confirmar.servidor_ip}
+                  {confirmar.utilizador ? ` como "${confirmar.utilizador}"` : ""}
+                </p>
+              )}
+            </div>
+
+            {/* Botões */}
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmar(null)}
+                className="flex-1 py-2.5 rounded-xl text-[12px] font-bold cursor-pointer"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}>
+                Cancelar
+              </button>
+              <button onClick={confirmarLibertar}
+                className="flex-1 py-2.5 rounded-xl text-[12px] font-bold cursor-pointer"
+                style={{ background: "#225E66", border: "1px solid rgba(34,94,102,0.5)", color: "#fff" }}>
+                Libertar IP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
       <div className="shrink-0 px-8 pt-6 pb-5 flex items-start justify-between">

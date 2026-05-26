@@ -26,8 +26,8 @@ use config::load_config;
 use db::{bootstrap_admin_if_needed, cleanup_loop, create_pool, load_operadores, verify_schema};
 use handlers::{
     eclusas::{atualizar_eclusa, get_eclusas, ler_eclusas_do_disco},
-    misc::{add_operador, del_operador, get_logs, get_operadores, health},
-    sessions::{encerrar, get_estado, get_sessoes, iniciar, sessoes_simples, shadow_simples, sse_eventos},
+    misc::{add_operador, admin_rdp_direto, del_operador, get_logs, get_operadores, health},
+    sessions::{encerrar, get_estado, get_sessoes, iniciar, sessoes_simples, shadow_simples, sse_eventos, voltar_original},
     stream::{get_mjpeg, post_frame, ws_viewer},
     supervisao::{encerrar_supervisao, iniciar_supervisao},
     users::{
@@ -37,7 +37,7 @@ use handlers::{
     },
 };
 use handlers::misc::{heartbeat, wincc_status};
-use rdp::rdp_poll_loop;
+use rdp::{rdp_poll_loop, servidores_poll_loop};
 use state::AppState;
 
 // ── Tracing ───────────────────────────────────────────────────────────────────
@@ -84,6 +84,15 @@ async fn shutdown_signal() {
 
 async fn servidor_health_watchdog(state: state::Shared) {
     const TIMEOUT_SECS: u64 = 5;
+
+    // IDs dos servidores reserva — por ordem de prioridade
+    const RESERVAS: &[&str] = &["Reserva01", "Reserva02", "Reserva03"];
+    // IDs dos servidores de produção que têm WinCC
+    const PRODUCAO: &[&str] = &["RG", "PN", "CL", "CM", "VR"];
+
+    // Rastreia estado anterior para detetar transições
+    let mut anterior: std::collections::HashMap<String, (bool, bool)> = std::collections::HashMap::new();
+
     loop {
         tokio::time::sleep(Duration::from_secs(3)).await;
 
@@ -91,6 +100,7 @@ async fn servidor_health_watchdog(state: state::Shared) {
         let mut st     = state.inner.write().await;
         let mut mudou  = false;
 
+        // 1. Atualiza windows_vivo com base nos heartbeats
         for (srv, health) in st.servidor_health.iter_mut() {
             let hb_ok = heartbeats.get(srv)
                 .map(|t| t.elapsed().as_secs() < TIMEOUT_SECS)
@@ -98,7 +108,7 @@ async fn servidor_health_watchdog(state: state::Shared) {
 
             if health.windows_vivo != hb_ok {
                 health.windows_vivo = hb_ok;
-                if !hb_ok { health.wincc_vivo = false; } // se Windows morreu, WinCC também
+                if !hb_ok { health.wincc_vivo = false; }
                 mudou = true;
                 if hb_ok {
                     tracing::info!(servidor = %srv, "Servidor ONLINE");
@@ -106,6 +116,158 @@ async fn servidor_health_watchdog(state: state::Shared) {
                     tracing::warn!(servidor = %srv, "Servidor OFFLINE — heartbeat parou");
                 }
             }
+        }
+
+        // 2. Deteta transições e emite eventos SSE de failover / retorno
+        let snapshot: Vec<(String, String, bool, bool)> = st.servidor_health
+            .iter()
+            .map(|(id, h)| (id.clone(), h.ip.clone(), h.windows_vivo, h.wincc_vivo))
+            .collect();
+
+        // Reserva disponível = windows_vivo=true E wincc_vivo=true (WinCC já a correr)
+        let reserva_disponivel: Option<(String, String)> = RESERVAS.iter()
+            .find(|&&r| snapshot.iter().any(|(id, _, wv, wcv)| id == r && *wv && *wcv))
+            .and_then(|r| {
+                snapshot.iter()
+                    .find(|(id, _, _, _)| id == r)
+                    .map(|(id, ip, _, _)| (id.clone(), ip.clone()))
+            });
+
+        for (id, ip_original, windows_vivo, wincc_vivo) in &snapshot {
+            if !PRODUCAO.contains(&id.as_str()) { continue; }
+
+            let agora = (*windows_vivo, *wincc_vivo);
+
+            // Primeira iteração — inicializa e verifica já se há failover pendente
+            let prev = match anterior.get(id).copied() {
+                Some(p) => p,
+                None => {
+                    anterior.insert(id.clone(), agora);
+                    // Se arrancou com servidor já degradado, trata como "caiu"
+                    // para não perder transições que aconteceram antes do arranque
+                    if !agora.0 || !agora.1 {
+                        anterior.insert(id.clone(), (true, true));
+                    }
+                    continue;
+                }
+            };
+
+            // Servidor caiu (windows OU wincc ficou false)
+            let caiu = (prev.0 && !agora.0) || (prev.1 && !agora.1);
+            if caiu {
+                // Dispara failover se há sessão registada OU se o RDP estava ocupado
+                // (o rdp_poll_loop pode limpar sessoes.conectado antes do watchdog detetar a queda)
+                let cliente_ativo = {
+                    let sessao_ok = match id.as_str() {
+                        "RG" => st.sessoes.eclusa_RG.conectado,
+                        "PN" => st.sessoes.eclusa_PN.conectado,
+                        _    => false,
+                    };
+                    let rdp_chave = match id.as_str() {
+                        "RG" => "eclusa_RG",
+                        "PN" => "eclusa_PN",
+                        _    => "",
+                    };
+                    let rdp_ocupado = st.rdp.get(rdp_chave).map(|r| r.ocupado).unwrap_or(false);
+                    sessao_ok || rdp_ocupado
+                };
+
+                if let Some((ref id_reserva, ref ip_reserva)) = reserva_disponivel {
+                    // Regista IP de failover — rdp_poll_loop passa a monitorizar o reserva
+                    let cliente_key = match id.as_str() {
+                        "RG" => "eclusa_RG",
+                        "PN" => "eclusa_PN",
+                        _    => "",
+                    };
+                    if !cliente_key.is_empty() {
+                        state.failover_ips.write().await
+                            .insert(cliente_key.to_string(), ip_reserva.clone());
+                    }
+                    if cliente_ativo {
+                        let payload = serde_json::json!({
+                            "_event":      "failover",
+                            "servidor":    id,
+                            "ip_original": ip_original,
+                            "ip_reserva":  ip_reserva,
+                            "id_reserva":  id_reserva,
+                            "motivo":      if !agora.0 { "windows_offline" } else { "wincc_offline" },
+                        }).to_string();
+                        let _ = state.sse_tx.send(payload);
+                        tracing::warn!(servidor = %id, reserva = %id_reserva, ip_reserva = %ip_reserva, "SSE failover enviado — cliente ativo");
+                    } else {
+                        tracing::warn!(servidor = %id, reserva = %id_reserva, "Servidor caiu — failover_ips atualizado, sem cliente ativo para reconectar");
+                    }
+                } else {
+                    tracing::error!(servidor = %id, "Servidor caiu mas SEM reserva disponivel com WinCC online — failover impossivel");
+                }
+            }
+
+            // Servidor voltou (ambos true após ter estado offline)
+            if (!prev.0 || !prev.1) && agora.0 && agora.1 {
+                let cliente_key = match id.as_str() {
+                    "RG" => "eclusa_RG",
+                    "PN" => "eclusa_PN",
+                    _    => "",
+                };
+
+                // Verificar se há sessão ativa no reserva para este cliente
+                // e obter o operador registado — só esse PC deve reconectar
+                let (tem_sessao_no_reserva, operador_no_reserva) = if !cliente_key.is_empty() {
+                    let em_failover = state.failover_ips.read().await.contains_key(cliente_key);
+                    let (sessao_ativa, operador) = match id.as_str() {
+                        "RG" => (st.sessoes.eclusa_RG.conectado, st.sessoes.eclusa_RG.operador.clone()),
+                        "PN" => (st.sessoes.eclusa_PN.conectado, st.sessoes.eclusa_PN.operador.clone()),
+                        _    => (false, String::new()),
+                    };
+                    (em_failover && sessao_ativa, operador)
+                } else {
+                    (false, String::new())
+                };
+
+                if tem_sessao_no_reserva {
+                    // Há operador no reserva — emite evento com o nome do operador.
+                    // Cada Tauri verifica se o operador local coincide; só o PC correto reconecta.
+                    let payload = serde_json::json!({
+                        "_event":          "servidor_voltou",
+                        "servidor":        id,
+                        "ip_original":     ip_original,
+                        "cliente_key":     cliente_key,
+                        "reconectar_auto": true,
+                        "operador":        operador_no_reserva,
+                    }).to_string();
+                    let _ = state.sse_tx.send(payload);
+                    tracing::info!(servidor = %id, ip = %ip_original, "SSE servidor_voltou — reconexão automática em curso");
+
+                    // Timeout de segurança: se o frontend não confirmar via /sessoes/voltar-original
+                    // em 30s, limpa failover_ips automaticamente para desbloquear o reserva.
+                    let state_clone  = state.clone();
+                    let ck           = cliente_key.to_string();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(30)).await;
+                        let mut fips = state_clone.failover_ips.write().await;
+                        if fips.contains_key(&ck) {
+                            fips.remove(&ck);
+                            tracing::warn!(cliente = %ck, "failover_ips limpo por timeout (frontend não confirmou em 30s)");
+                        }
+                    });
+                } else {
+                    // Sem sessão ativa no reserva — limpa failover imediatamente
+                    if !cliente_key.is_empty() {
+                        state.failover_ips.write().await.remove(cliente_key);
+                    }
+                    let payload = serde_json::json!({
+                        "_event":          "servidor_voltou",
+                        "servidor":        id,
+                        "ip_original":     ip_original,
+                        "cliente_key":     cliente_key,
+                        "reconectar_auto": false,
+                    }).to_string();
+                    let _ = state.sse_tx.send(payload);
+                    tracing::info!(servidor = %id, ip = %ip_original, "SSE servidor_voltou — sem sessão ativa, failover_ips limpo");
+                }
+            }
+
+            anterior.insert(id.clone(), agora);
         }
 
         if mudou {
@@ -148,6 +310,7 @@ async fn main() {
 
     // ── Background tasks ──────────────────────────────────────────────────────
     tokio::spawn(rdp_poll_loop(state.clone()));
+    tokio::spawn(servidores_poll_loop(state.clone()));
     tokio::spawn(plc::plc_health_loop(state.clone()));
     tokio::spawn(failover::failover_monitor_loop(state.clone()));
     tokio::spawn(cleanup_loop(state.clone()));
@@ -185,6 +348,7 @@ async fn main() {
         .route("/sessoes/shadow",            get(shadow_simples))
         .route("/sessoes/iniciar",           post(iniciar))
         .route("/sessoes/encerrar",          post(encerrar))
+        .route("/sessoes/voltar-original",   post(voltar_original))
         .route("/supervisao/iniciar",        post(iniciar_supervisao))
         .route("/supervisao/encerrar",       post(encerrar_supervisao))
         .route("/operadores",                get(get_operadores).post(add_operador))
@@ -196,6 +360,7 @@ async fn main() {
         .route("/blacklist",                 get(list_blacklist).post(add_blacklist))
         .route("/blacklist/:id",             delete(remove_blacklist))
         .route("/admin/force-logout",        post(admin_force_logout))
+        .route("/admin/rdp-direto",          post(admin_rdp_direto))
         // ── Heartbeat — wincc-agent em cada Windows Server (sem auth, LAN only) ─
         .route("/heartbeat/:servidor",        post(heartbeat))
         .route("/wincc-status/:servidor",    post(wincc_status))

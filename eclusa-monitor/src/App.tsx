@@ -9,20 +9,22 @@ import EclusaMonitorCard from "./components/eclusa/EclusaMonitorCard";
 import AdminUtilizadores from "./components/admin/AdminUtilizadores";
 import AdminLogs         from "./components/admin/AdminLogs";
 import AdminBlacklist    from "./components/admin/AdminBlacklist";
+import AdminServidores   from "./components/admin/AdminServidores";
 import AdminSidebar      from "./components/admin/AdminSidebar";
 
 import { useAuth }   from "./hooks/useAuth";
 import { useEstado } from "./hooks/useEstado";
 import { useRdp }    from "./hooks/useRdp";
 import type { ClienteKey, Eclusa, Pagina, RdpInfo, Sessao, Supervisao } from "./types";
+import type { VoltouPayload } from "./hooks/useEstado";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const DEFAULT_API = "http://172.29.164.12:8080";
 
 const ECLUSA_CLIENTE: Record<string, ClienteKey> = {
-  RG: "cliente1",
-  PN: "cliente2",
+  RG: "eclusa_RG",
+  PN: "eclusa_PN",
 };
 
 const ECLUSA_KEYS = ["IND1", "IND2", "RG", "IND4", "PN"] as const;
@@ -36,24 +38,88 @@ export default function App() {
   const [ipCliente1,    setIpCliente1]    = useState("172.29.164.13");
   const [ipCliente2,    setIpCliente2]    = useState("172.29.164.14");
   const [ipReserva,     setIpReserva]     = useState("172.29.164.15");
-  const [failoverInfo,  setFailoverInfo]  = useState<{ cliente: string; ip_reserva: string } | null>(null);
+  const [voltouInfo,    setVoltouInfo]    = useState<VoltouPayload | null>(null);
+  // Rastreia qual cliente está a usar reserva: "cliente1" -> "Reserva01"
+  const [emReservaMap, setEmReservaMap] = useState<Record<string, string>>({});
 
   const { username, token, isAdmin, login, logout } = useAuth();
 
+  // refs para acesso dentro de callbacks sem dependências estáticas
+  const tokenRef  = useRef(token);
+  const apiUrlRef = useRef(apiUrl);
+  useEffect(() => { tokenRef.current  = token;  }, [token]);
+  useEffect(() => { apiUrlRef.current = apiUrl; }, [apiUrl]);
+
   // onFailoverSse via ref — quebra dependência circular useRdp ↔ useEstado
-  const onFailoverRef = useRef<((p: { cliente: string; ip_reserva: string }) => void) | undefined>(undefined);
-  const onFailoverStable = useCallback((p: { cliente: string; ip_reserva: string }) => {
-    setFailoverInfo(p);
+  const onFailoverRef        = useRef<((p: { cliente: string; ip_reserva: string }) => void) | undefined>(undefined);
+  // handleVoltarOriginal via ref — precisa estar declarado antes de onVoltouStable
+  const onVoltarOriginalRef  = useRef<((cliente: import("./types").ClienteKey, ipOriginal: string) => Promise<void>) | undefined>(undefined);
+
+  const onFailoverStable = useCallback((p: { cliente: string; ip_reserva: string; id_reserva?: string }) => {
+    if (p.id_reserva) {
+      const clienteKey = ECLUSA_CLIENTE[p.cliente] ?? p.cliente;
+      setEmReservaMap(prev => ({ ...prev, [clienteKey]: p.id_reserva! }));
+    }
     onFailoverRef.current?.(p);
   }, []);
 
-  const { estado, apiOk, fetchEstado } = useEstado(apiUrl, ipReserva, onFailoverStable);
+  const usernameRef = useRef(username);
+  useEffect(() => { usernameRef.current = username; }, [username]);
+
+  const onVoltouStable = useCallback((p: VoltouPayload) => {
+    if (p.reconectar_auto && p.cliente_key) {
+      // Só o PC do operador original reconecta — compara operador do backend com username local.
+      // Outros PCs (admins, outros operadores) ignoram este evento.
+      const operadorLocal = usernameRef.current;
+      if (!operadorLocal || !p.operador) return;
+      if (p.operador.toLowerCase() !== operadorLocal.toLowerCase()) return;
+
+      // handleVoltarOriginal: fecha mstsc do reserva, regista sessão no original, abre mstsc no original
+      const clienteKey = (ECLUSA_CLIENTE[p.cliente_key] ?? p.cliente_key) as import("./types").ClienteKey;
+      onVoltarOriginalRef.current?.(clienteKey, p.ip_original);
+      // Remove do mapa de reserva
+      setEmReservaMap(prev => {
+        const next = { ...prev };
+        delete next[clienteKey];
+        return next;
+      });
+    } else {
+      // Sem sessão ativa no reserva — limpa badge de reserva e notifica visualmente
+      if (p.cliente_key) {
+        const clienteKey = (ECLUSA_CLIENTE[p.cliente_key] ?? p.cliente_key) as import("./types").ClienteKey;
+        setEmReservaMap(prev => {
+          const next = { ...prev };
+          delete next[clienteKey];
+          return next;
+        });
+      }
+      setVoltouInfo(p);
+    }
+  }, []);
+
+  const { estado, servidorHealth, apiOk, fetchEstado } = useEstado(apiUrl, ipReserva, onFailoverStable, onVoltouStable);
+
+  const onFailoverManual = useCallback((cliente: string, idReserva: string, _ipR: string) => {
+    const clienteKey = ECLUSA_CLIENTE[cliente] ?? cliente;
+    setEmReservaMap(prev => ({ ...prev, [clienteKey]: idReserva }));
+  }, []);
+
+  const onLimparReserva = useCallback((cliente: import("./types").ClienteKey) => {
+    setEmReservaMap(prev => {
+      const next = { ...prev };
+      delete next[cliente];
+      return next;
+    });
+  }, []);
 
   const {
     conectando, emSupervisao, erro, setErro,
     handleConectar, handleEncerrar, handleAdminEncerrar, handleSupervisao, handleSairSupervisao,
-    onFailoverSse,
-  } = useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin: () => setLoginAberto(true), ipCliente1, ipCliente2, ipReserva });
+    onFailoverSse, handleVoltarOriginal,
+  } = useRdp({ apiUrl, token, username, estado, fetchEstado, onNeedLogin: () => setLoginAberto(true), ipCliente1, ipCliente2, ipReserva, servidorHealth, onFailoverManual, onLimparReserva });
+
+  // Liga onVoltarOriginalRef ao handler real depois de useRdp estar pronto
+  useEffect(() => { onVoltarOriginalRef.current = handleVoltarOriginal; }, [handleVoltarOriginal]);
 
   // Liga o ref ao handler real depois de useRdp estar pronto
   useEffect(() => { onFailoverRef.current = onFailoverSse; }, [onFailoverSse]);
@@ -73,13 +139,13 @@ export default function App() {
   // ── Helpers de leitura do estado ─────────────────────────────────────────────
 
   const sessao     = (k: ClienteKey): Sessao =>
-    estado?.sessoes[k] ?? { operador: "", timestamp_inicio: "", conectado: false };
+    (estado?.sessoes as Record<string, Sessao>)?.[k] ?? { operador: "", timestamp_inicio: "", conectado: false };
   const rdpInfo    = (k: ClienteKey): RdpInfo =>
-    estado?.rdp?.[k]  ?? { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false };
+    (estado?.rdp as Record<string, RdpInfo>)?.[k]  ?? { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false };
   const eclusa     = (key: string): Eclusa | undefined =>
     estado?.eclusas?.eclusas?.[key];
   const supervisoes = (k: ClienteKey): Supervisao[] =>
-    estado?.supervisoes?.[k] ?? [];
+    (estado?.supervisoes as Record<string, Supervisao[]>)?.[k] ?? [];
 
   // true enquanto não houver confirmação de falha; false quando sabemos que está offline
   const backendOnline = apiOk !== false;
@@ -101,11 +167,12 @@ export default function App() {
               const cliente = ECLUSA_CLIENTE[key as keyof typeof ECLUSA_CLIENTE];
               return (
                 <EclusaAcessoCard key={key} nomeEclusa={key}
-                  nomeCliente={cliente ? (cliente === "cliente1" ? ipCliente1 : ipCliente2) : "Posto Indisponível"}
+                  nomeCliente={cliente ? (cliente === "eclusa_RG" ? ipCliente1 : ipCliente2) : "Posto Indisponível"}
                   sessao={cliente ? sessao(cliente) : { operador: "", timestamp_inicio: "", conectado: false }}
                   rdp={cliente ? rdpInfo(cliente) : { ocupado: false, utilizador: "", verificado: false, timestamp: "", nao_autorizado: false }}
                   conectando={cliente ? conectando === cliente : false}
                   ehAdmin={isAdmin} backendOnline={backendOnline}
+                  emReserva={cliente ? emReservaMap[cliente] : undefined}
                   onConectar={() => cliente && handleConectar(cliente)}
                   onEncerrar={() => cliente && handleEncerrar(cliente)}
                   onForcarEncerrar={() => cliente && handleAdminEncerrar(cliente)}
@@ -158,8 +225,6 @@ export default function App() {
 
   // ── Diálogos e erros (partilhados) ────────────────────────────────────────────
 
-  const nomeCliente = failoverInfo?.cliente === "cliente1" ? "RG" : failoverInfo?.cliente === "cliente2" ? "PN" : failoverInfo?.cliente ?? "";
-
   const dialogs = (
     <>
       <LoginDialog isOpen={loginAberto} canClose={true} apiUrl={apiUrl}
@@ -174,30 +239,15 @@ export default function App() {
           <span className="ml-2 text-[#E32C2C]/50 font-mono text-xs">&#x2715;</span>
         </div>
       )}
-      {failoverInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}>
-          <div className="bg-[#1a2435] border border-[#E32C2C]/40 rounded-3xl shadow-2xl px-10 py-8 flex flex-col items-center gap-5 max-w-sm w-full mx-4">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "rgba(227,44,44,0.15)" }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E32C2C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-            </div>
-            <div className="text-center">
-              <p className="text-white font-black text-xl mb-1">Servidor Inacessível</p>
-              <p className="text-white/50 text-sm">Servidor <span className="text-white font-bold">{nomeCliente}</span> caiu — a redirecionar para servidor reserva</p>
-              <p className="text-[#28FF52] font-mono font-bold text-sm mt-2">{failoverInfo.ip_reserva}</p>
-            </div>
-            <div className="flex items-center gap-2 text-white/40 text-xs">
-              <div className="w-4 h-4 border-2 border-white/20 border-t-[#28FF52] rounded-full animate-spin" />
-              A ligar ao servidor reserva...
-            </div>
-            <button
-              onClick={() => setFailoverInfo(null)}
-              className="text-white/30 text-xs hover:text-white/60 transition-colors cursor-pointer"
-            >
-              Fechar
-            </button>
-          </div>
+      {voltouInfo && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl cursor-pointer"
+          style={{ background: "#1a2435", border: "1px solid rgba(40,255,82,0.3)" }}
+          onClick={() => setVoltouInfo(null)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#28FF52" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          <span className="text-white font-bold text-sm">Servidor <span style={{ color: "#28FF52" }}>{voltouInfo.servidor}</span> restabelecido</span>
+          <span className="text-white/30 font-mono text-xs ml-2">&#x2715;</span>
         </div>
       )}
     </>
@@ -207,9 +257,10 @@ export default function App() {
 
   if (isAdmin && username) {
     const adminContent =
-      pagina === "admin-usuarios" ? <AdminUtilizadores apiUrl={apiUrl} token={token} />
-      : pagina === "admin-logs"   ? <AdminLogs         apiUrl={apiUrl} token={token} />
-      : pagina === "admin-blacklist" ? <AdminBlacklist apiUrl={apiUrl} token={token} />
+      pagina === "admin-usuarios"   ? <AdminUtilizadores apiUrl={apiUrl} token={token} />
+      : pagina === "admin-logs"     ? <AdminLogs         apiUrl={apiUrl} token={token} />
+      : pagina === "admin-blacklist"   ? <AdminBlacklist    apiUrl={apiUrl} token={token} />
+      : pagina === "admin-servidores"  ? <AdminServidores   servidorHealth={servidorHealth} rdp={estado?.rdp} sessoes={estado?.sessoes} token={token} />
       : dashboardContent;
 
     return (
@@ -240,6 +291,7 @@ export default function App() {
         onPagina={setPagina}
         onLoginClick={() => setLoginAberto(true)}
         onSair={() => { logout(); setPagina("dashboard"); }}
+        servidorHealth={servidorHealth}
       />
       {dashboardContent}
       {dialogs}

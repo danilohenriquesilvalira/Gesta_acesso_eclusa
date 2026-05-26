@@ -35,15 +35,25 @@ export interface PlcHealth {
   last_check:       string;
 }
 
-export interface Estado {
-  sessoes:     { cliente1: Sessao; cliente2: Sessao };
-  rdp:         { cliente1: RdpInfo; cliente2: RdpInfo };
-  eclusas:     { timestamp: string; eclusas: { [k: string]: Eclusa } };
-  supervisoes: { cliente1: Supervisao[]; cliente2: Supervisao[] };
-  operadores:  string[];
-  plc_health:  Record<string, PlcHealth>;
-  timestamp:   string;
+export interface ServidorHealth {
+  servidor:         string;
+  ip:               string;
+  windows_vivo:     boolean;
+  wincc_vivo:       boolean;
+  ultimo_heartbeat: string;
+  ultimo_wincc:     string;
 }
 
-export type ClienteKey = "cliente1" | "cliente2";
-export type Pagina     = "dashboard" | "admin-usuarios" | "admin-logs" | "admin-blacklist" | "rede";
+export interface Estado {
+  sessoes:          { eclusa_RG: Sessao; eclusa_PN: Sessao };
+  rdp:              { eclusa_RG: RdpInfo; eclusa_PN: RdpInfo };
+  eclusas:          { timestamp: string; eclusas: { [k: string]: Eclusa } };
+  supervisoes:      { eclusa_RG: Supervisao[]; eclusa_PN: Supervisao[] };
+  operadores:       string[];
+  plc_health:       Record<string, PlcHealth>;
+  servidor_health:  Record<string, ServidorHealth>;
+  timestamp:        string;
+}
+
+export type ClienteKey = "eclusa_RG" | "eclusa_PN";
+export type Pagina     = "dashboard" | "admin-usuarios" | "admin-logs" | "admin-blacklist" | "admin-servidores" | "rede";

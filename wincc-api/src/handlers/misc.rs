@@ -176,3 +176,23 @@ pub async fn get_logs(State(s): State<Shared>, _auth: AuthUser) -> Json<Value> {
 
     Json(serde_json::json!(logs))
 }
+
+// ── RDP Admin direto ──────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct AdminRdpReq {
+    pub server_ip: String,
+    pub client_ip: String,
+}
+
+/// POST /admin/rdp-direto — regista autorização temporária (10 min) para RDP admin direto.
+/// Chamado pelo Tauri antes de abrir mstsc, para que o rdp_poll não expulse a sessão.
+/// A chave é o IP do servidor — qualquer sessão Administrator nesse servidor fica isenta.
+pub async fn admin_rdp_direto(
+    State(s):  State<Shared>,
+    _admin:    AdminUser,
+    Json(req): Json<AdminRdpReq>,
+) -> Json<Value> {
+    s.admin_rdp.write().await.insert(req.server_ip.trim().to_string(), std::time::Instant::now());
+    Json(serde_json::json!({"ok": true}))
+}

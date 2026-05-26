@@ -20,8 +20,8 @@ pub struct Sessao {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Sessoes {
-    pub cliente1: Sessao,
-    pub cliente2: Sessao,
+    pub eclusa_RG: Sessao,
+    pub eclusa_PN: Sessao,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -32,8 +32,8 @@ pub struct Supervisao {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Supervisoes {
-    pub cliente1: Vec<Supervisao>,
-    pub cliente2: Vec<Supervisao>,
+    pub eclusa_RG: Vec<Supervisao>,
+    pub eclusa_PN: Vec<Supervisao>,
 }
 
 // ── RDP State ─────────────────────────────────────────────────────────────────
@@ -96,8 +96,10 @@ pub struct WinccStatusReq {
 
 #[derive(Debug, Deserialize)]
 pub struct IniciarReq {
-    pub cliente:  String,
-    pub operador: String,
+    pub cliente:    String,
+    pub operador:   String,
+    /// IP real do servidor onde o RDP foi aberto — preenchido quando há failover manual
+    pub ip_servidor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

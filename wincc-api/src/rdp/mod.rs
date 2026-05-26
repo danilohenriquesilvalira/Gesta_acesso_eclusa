@@ -6,7 +6,7 @@ use tokio::time::sleep;
 
 use crate::{
     config::STARTUP_GRACE_SECS,
-    db::audit::log_evento_bg,
+    db::audit::{log_evento, log_evento_bg},
     state::Shared,
     types::{now, RdpInfo},
 };
@@ -21,46 +21,66 @@ use self::{
 pub async fn rdp_poll_loop(state: Shared) {
     let poll_interval = Duration::from_millis(crate::config::RDP_POLL_MS);
 
-    // Contador de falhas consecutivas por cliente — failover dispara ao atingir limite
+    // Contador de falhas consecutivas por cliente — apenas para logging
     let mut falhas_consecutivas: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
-    // Número de falhas para confirmar servidor inacessível (3 × 1.5s = ~4.5s)
-    const FALHAS_PARA_FAILOVER: u32 = 3;
 
     // Sessões já em processo de expulsão — evita disparar tsdiscon múltiplas vezes
     // enquanto o anterior ainda está a correr (chave: "ip:session_id")
     let mut em_expulsao: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     loop {
+        // IPs de failover ativos — se presente, monitoriza o reserva em vez do servidor principal
+        let failover_ips: std::collections::HashMap<String, String> = {
+            state.failover_ips.read().await.clone()
+        };
+
+        // Usa IP de failover se ativo, caso contrário o IP original do cliente
         let clients: Vec<(String, String)> = state.rdp_clients
             .iter()
-            .map(|c| (c.id.clone(), c.ip.clone()))
+            .map(|c| {
+                let ip = failover_ips.get(&c.id).cloned().unwrap_or_else(|| c.ip.clone());
+                (c.id.clone(), ip)
+            })
             .collect();
 
         // Clona cfg uma vez por ciclo — barato (só strings)
         let cfg = state.cfg.clone();
 
         // Lê heartbeats uma vez por ciclo — sem lock durante o SSH
+        // Em failover: usa ID do reserva para heartbeat, não o do cliente
         let heartbeats: std::collections::HashMap<String, std::time::Instant> = {
             state.heartbeats.read().await.clone()
         };
+
+        // Lê sessões admin autorizadas — expiram após 10 min sem renovação
+        let admin_rdp: std::collections::HashMap<String, std::time::Instant> = {
+            let mut map = state.admin_rdp.write().await;
+            map.retain(|_, t| t.elapsed().as_secs() < 600);
+            map.clone()
+        };
+
+        // Mapa inverso IP→ID para encontrar heartbeat do reserva pelo IP
+        let ip_to_id: std::collections::HashMap<String, String> = state.servidores
+            .iter()
+            .map(|s| (s.ip.clone(), s.id.clone()))
+            .collect();
 
         // Verifica todos os clientes em paralelo — minimiza tempo total do ciclo
         let handles: Vec<_> = clients
             .iter()
             .map(|(cliente, ip)| {
-                let ip       = ip.clone();
-                let cfg      = cfg.clone();
-                let cliente  = cliente.clone();
-                let hb       = heartbeats.get(&cliente).copied();
+                let ip      = ip.clone();
+                let cfg     = cfg.clone();
+                let cliente = cliente.clone();
+                // Heartbeat: tenta pelo ID do cliente, depois pelo ID do servidor no IP atual
+                let srv_id  = ip_to_id.get(&ip).cloned().unwrap_or_else(|| cliente.clone());
+                let hb = heartbeats.get(&srv_id).copied()
+                    .or_else(|| heartbeats.get(&cliente).copied());
                 tokio::task::spawn_blocking(move || {
-                    // Se agente heartbeat instalado e recente (<5s) → servidor vivo
-                    // Ainda faz SSH para obter info da sessão RDP
-                    // Se heartbeat ausente ou antigo → usa SSH para verificar
                     let hb_ok = hb.map(|t| t.elapsed().as_secs() < 5).unwrap_or(false);
                     if hb_ok {
-                        // Servidor confirmado vivo pelo agente — faz SSH só para sessão RDP
                         let mut info = verificar_rdp(&ip, &cfg);
-                        info.verificado = true; // agente confirma
+                        info.verificado = true;
                         info
                     } else {
                         verificar_rdp(&ip, &cfg)
@@ -76,6 +96,11 @@ pub async fn rdp_poll_loop(state: Shared) {
             .collect();
 
         // Processa resultados sob write lock — operação rápida (só memória)
+        // Clientes com failover ativo — sessão ainda válida no reserva, não limpar
+        let clientes_em_failover: std::collections::HashSet<String> = {
+            state.failover_ips.read().await.keys().cloned().collect()
+        };
+
         let mut kills: Vec<(String, u32, String)> = Vec::new(); // (ip, sid, utilizador)
         {
             let mut st = state.inner.write().await;
@@ -84,13 +109,17 @@ pub async fn rdp_poll_loop(state: Shared) {
                 .unwrap_or(true);
 
             for ((cliente, ip), info) in clients.iter().zip(results.iter()) {
-                let registado = match cliente.as_str() {
-                    "cliente1" => st.sessoes.cliente1.conectado,
-                    "cliente2" => st.sessoes.cliente2.conectado,
-                    _          => false,
+                let em_failover = clientes_em_failover.contains(cliente.as_str());
+
+                // Em failover: o IP monitorado já é o reserva — sessão sempre registada
+                // (failover_ips só existe quando a sessão foi registada no reserva)
+                let registado = em_failover || match cliente.as_str() {
+                    "eclusa_RG" => st.sessoes.eclusa_RG.conectado,
+                    "eclusa_PN" => st.sessoes.eclusa_PN.conectado,
+                    _           => false,
                 };
 
-                let nao_autorizado   = info.ocupado && !registado;
+                let nao_autorizado = info.ocupado && !registado;
                 let prev             = st.rdp.get(cliente.as_str());
                 let mudou_verificado = prev.map(|o| o.verificado != info.verificado).unwrap_or(true);
                 let mudou_ocupado    = prev.map(|o| o.ocupado   != info.ocupado).unwrap_or(true);
@@ -101,12 +130,13 @@ pub async fn rdp_poll_loop(state: Shared) {
                 st.rdp.insert(cliente.clone(), new_info);
 
                 // Auto-limpa sessão presa: só actua se o RDP está verificado, livre,
-                // E a sessão tem mais de 30s (evita limpar durante o arranque do mstsc)
-                if !info.ocupado && info.verificado {
+                // E a sessão tem mais de 30s (evita limpar durante o arranque do mstsc).
+                // NUNCA limpa se o cliente está em failover — operador está no reserva.
+                if !info.ocupado && info.verificado && !em_failover {
                     let (sessao, sups) = match cliente.as_str() {
-                        "cliente1" => (&st.sessoes.cliente1, &st.supervisoes.cliente1),
-                        "cliente2" => (&st.sessoes.cliente2, &st.supervisoes.cliente2),
-                        _          => continue,
+                        "eclusa_RG" => (&st.sessoes.eclusa_RG, &st.supervisoes.eclusa_RG),
+                        "eclusa_PN" => (&st.sessoes.eclusa_PN, &st.supervisoes.eclusa_PN),
+                        _           => continue,
                     };
                     let sessao_velha = sessao.conectado && !sessao.timestamp_inicio.is_empty() && {
                         chrono::DateTime::parse_from_str(
@@ -120,54 +150,36 @@ pub async fn rdp_poll_loop(state: Shared) {
 
                     if sessao_velha {
                         match cliente.as_str() {
-                            "cliente1" => {
-                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente1.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
-                                st.sessoes.cliente1 = Default::default();
+                            "eclusa_RG" => {
+                                tracing::info!(cliente = %cliente, operador = %st.sessoes.eclusa_RG.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
+                                st.sessoes.eclusa_RG = Default::default();
                             }
-                            "cliente2" => {
-                                tracing::info!(cliente = %cliente, operador = %st.sessoes.cliente2.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
-                                st.sessoes.cliente2 = Default::default();
+                            "eclusa_PN" => {
+                                tracing::info!(cliente = %cliente, operador = %st.sessoes.eclusa_PN.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
+                                st.sessoes.eclusa_PN = Default::default();
                             }
                             _ => {}
                         }
                     }
                     if !sups_vazias {
                         match cliente.as_str() {
-                            "cliente1" => { st.supervisoes.cliente1.clear(); }
-                            "cliente2" => { st.supervisoes.cliente2.clear(); }
+                            "eclusa_RG" => { st.supervisoes.eclusa_RG.clear(); }
+                            "eclusa_PN" => { st.supervisoes.eclusa_PN.clear(); }
                             _ => {}
                         }
                     }
                 }
 
-                // Contador de falhas consecutivas — failover só dispara após N falhas
+                // Regista falhas consecutivas — usado apenas para logging, o failover
+                // é gerido exclusivamente pelo servidor_health_watchdog em main.rs,
+                // que conhece todos os reservas e escolhe o melhor disponível.
                 if !info.verificado {
                     let falhas = falhas_consecutivas.entry(cliente.clone()).or_insert(0);
                     *falhas += 1;
-
                     if *falhas == 1 {
                         tracing::warn!(cliente = %cliente, ip = %ip, "RDP inacessível");
                     }
-
-                    // Após N falhas confirmadas → failover
-                    if *falhas == FALHAS_PARA_FAILOVER {
-                        let reserva_ip = state.cfg.reserva_ip.clone();
-                        tracing::warn!(
-                            cliente = %cliente,
-                            ip = %ip,
-                            reserva = %reserva_ip,
-                            falhas = FALHAS_PARA_FAILOVER,
-                            "Servidor inacessível confirmado — failover para servidor reserva"
-                        );
-                        let payload = serde_json::json!({
-                            "_event": "failover",
-                            "cliente": cliente,
-                            "ip_reserva": reserva_ip,
-                        }).to_string();
-                        let _ = state.sse_tx.send(payload);
-                    }
                 } else {
-                    // Servidor voltou — reset contador
                     if falhas_consecutivas.get(cliente).copied().unwrap_or(0) > 0 {
                         tracing::info!(cliente = %cliente, ip = %ip, "RDP acessível — servidor recuperado");
                     }
@@ -184,8 +196,14 @@ pub async fn rdp_poll_loop(state: Shared) {
                     }
                 }
 
+                // Isenção: admin autorizou RDP direto neste servidor (registo válido por 10 min)
+                // Só isenta se o utilizador for o rdp_user (Administrator) — qualquer outro é expulso
+                let e_admin_autorizado = nao_autorizado
+                    && info.utilizador.eq_ignore_ascii_case(&cfg.rdp_user)
+                    && admin_rdp.contains_key(ip.as_str());
+
                 // Agendar desconexão de acesso não autorizado
-                if !in_grace && nao_autorizado {
+                if !in_grace && nao_autorizado && !e_admin_autorizado {
                     if let Some(sid) = info.sessao_id {
                         if info.nome_sessao.starts_with("rdp-tcp#") {
                             let chave = format!("{}:{}", ip, sid);
@@ -229,9 +247,9 @@ pub async fn rdp_poll_loop(state: Shared) {
     }
 }
 
-/// Desconecta sessão não autorizada com retry e bloqueia IP no firewall.
-/// Windows: tsdiscon nativo
-/// Linux:   ssh user@ip tsdiscon <sid>
+/// Desconecta sessão não autorizada e bloqueia IP no firewall.
+/// Estratégia: obter IP do cliente (necessário antes de tsdiscon no Linux/SSH),
+/// depois lançar tsdiscon + firewall em paralelo para mínima latência total.
 fn disconnect_unauthorized(
     server_ip:  &str,
     session_id: u32,
@@ -242,65 +260,210 @@ fn disconnect_unauthorized(
     log_evento_bg(db, "bloqueio",
         &format!("Acesso não autorizado: '{}' em {} sessão {} — a desconectar", utilizador, server_ip, session_id));
 
-    // 1. Obter IP do cliente ANTES de desconectar — após tsdiscon a ligação passa a
-    //    CLOSE_WAIT e já não aparece como ESTABLISHED no netstat.
+    // 1. Obter IP do cliente — necessário antes de tsdiscon (netstat deixa de mostrar após CLOSE_WAIT).
+    //    Windows: WTS API é quase instantânea (~10ms). Linux: SSH netstat ~2-3s.
     let client_ip = obter_ip_cliente_rdp(server_ip, session_id, cfg);
-    tracing::info!(
-        servidor = %server_ip,
-        sessao_id = session_id,
-        ip_cliente = ?client_ip,
-        "IP do cliente obtido antes de tsdiscon"
-    );
+    tracing::info!(servidor = %server_ip, sessao_id = session_id, ip_cliente = ?client_ip, "IP obtido");
 
-    // 2. Bloquear IP NO FIREWALL IMEDIATAMENTE — antes mesmo do tsdiscon.
-    //    Assim mesmo que o tsdiscon falhe ou demore, o cliente não consegue
-    //    reconectar enquanto o tsdiscon ainda está a correr.
-    if let Some(ref ip) = client_ip {
-        bloquear_ip(server_ip, ip, cfg);
-        log_evento_bg(db, "bloqueio",
-            &format!("IP {} bloqueado em {} (sessão {} de '{}')", ip, server_ip, session_id, utilizador));
-    } else {
-        tracing::warn!(servidor = %server_ip, sessao_id = session_id, "IP do cliente não obtido — firewall não aplicado");
-    }
+    // 2. tsdiscon + firewall em paralelo — ambos correm ao mesmo tempo.
+    let server_ip_owned  = server_ip.to_string();
+    let utilizador_owned = utilizador.to_string();
+    let cfg_fw  = cfg.clone();
+    let cfg_dis = cfg.clone();
+    let db_clone = db.clone();
 
-    // 3. Desconectar sessão (tsdiscon) — mesmo que o firewall já bloqueou,
-    //    isto remove a sessão da lista do servidor.
-    for attempt in 1..=3u8 {
+    // Thread A: tsdiscon
+    std::thread::spawn(move || {
         #[cfg(windows)]
-        let cmd_result = std::process::Command::new("tsdiscon")
-            .args([&session_id.to_string(), &format!("/server:{}", server_ip)])
+        let result = std::process::Command::new("tsdiscon")
+            .args([&session_id.to_string(), &format!("/server:{}", server_ip_owned)])
             .output();
 
         #[cfg(not(windows))]
-        let cmd_result = std::process::Command::new("ssh")
+        let result = std::process::Command::new("ssh")
             .args([
-                "-i", &cfg.ssh_key_path,
-                "-p", &cfg.ssh_port.to_string(),
+                "-i", &cfg_dis.ssh_key_path,
+                "-p", &cfg_dis.ssh_port.to_string(),
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=5",
-                &format!("{}@{}", cfg.rdp_user, server_ip),
+                &format!("{}@{}", cfg_dis.rdp_user, server_ip_owned),
                 &format!("tsdiscon {}", session_id),
             ])
             .output();
 
-        match cmd_result {
-            Ok(o) => {
-                tracing::info!(
-                    tentativa = attempt,
-                    sessao_id = session_id,
-                    servidor = %server_ip,
-                    exit_code = ?o.status.code(),
-                    stderr = %String::from_utf8_lossy(&o.stderr),
-                    "tsdiscon executado"
-                );
-                break; // Não repetir — tsdiscon não tem retry útil
+        match result {
+            Ok(o) => tracing::info!(sessao_id = session_id, servidor = %server_ip_owned, exit_code = ?o.status.code(), "tsdiscon executado"),
+            Err(e) => tracing::error!(servidor = %server_ip_owned, erro = %e, "tsdiscon erro"),
+        }
+    });
+
+    // Thread B: firewall + DB (só se temos o IP).
+    // Captura o handle do runtime Tokio ANTES de entrar na thread OS —
+    // dentro de std::thread::spawn não há contexto Tokio e tokio::spawn falharia.
+    if let Some(ip) = client_ip {
+        let server_ip_fw  = server_ip.to_string();
+        let rt_handle     = tokio::runtime::Handle::current();
+        std::thread::spawn(move || {
+            bloquear_ip(&server_ip_fw, &ip, &cfg_fw);
+
+            let reason   = format!("Acesso não autorizado: utilizador '{}' tentou aceder a {} — bloqueado automaticamente", utilizador_owned, server_ip_fw);
+            let msg_log  = format!("IP {} bloqueado — tentou aceder a {} como '{}'", ip, server_ip_fw, utilizador_owned);
+            let ip_clone       = ip.clone();
+            let srv_clone      = server_ip_fw.clone();
+            let user_clone     = utilizador_owned.clone();
+            rt_handle.spawn(async move {
+                let _ = sqlx::query(
+                    "INSERT INTO ip_blacklist (ip, reason, servidor_ip, utilizador) \
+                     SELECT $1::inet, $2, $3::inet, $4 \
+                     WHERE NOT EXISTS (SELECT 1 FROM ip_blacklist WHERE ip = $1::inet AND active = TRUE)"
+                )
+                .bind(&ip_clone)
+                .bind(&reason)
+                .bind(&srv_clone)
+                .bind(&user_clone)
+                .execute(&db_clone)
+                .await;
+
+                log_evento(&db_clone, "bloqueio", &msg_log).await;
+            });
+        });
+    } else {
+        tracing::warn!(servidor = %server_ip, sessao_id = session_id, "IP do cliente não obtido — firewall não aplicado");
+    }
+}
+
+// ── Poll de sessões não autorizadas nos servidores WinCC + reservas ──────────
+
+/// Monitoriza todos os servidores (WinCC + reservas) para sessões RDP não autorizadas.
+/// Qualquer sessão activa nestes servidores é não autorizada, excepto admin via rdp-direto.
+pub async fn servidores_poll_loop(state: Shared) {
+    let poll_interval = Duration::from_millis(crate::config::RDP_POLL_MS);
+    let mut em_expulsao: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // IDs geridos pelo rdp_poll_loop com lógica própria de sessões — excluir aqui
+    const GERIDOS_PELO_RDP_POLL: &[&str] = &["RG", "PN"];
+
+    loop {
+        let servidores: Vec<(String, String)> = state.servidores
+            .iter()
+            .filter(|s| !GERIDOS_PELO_RDP_POLL.contains(&s.id.as_str()))
+            .map(|s| (s.id.clone(), s.ip.clone()))
+            .collect();
+
+        let cfg = state.cfg.clone();
+
+        let admin_rdp: std::collections::HashMap<String, std::time::Instant> = {
+            let map = state.admin_rdp.read().await;
+            map.clone()
+        };
+
+        // IPs de failover ativos — sessões nestes IPs são de operadores legítimos
+        // Exemplo: "eclusa_RG" → "172.29.164.15" significa que o Reserva01 tem sessão válida
+        let failover_ips_ativos: std::collections::HashSet<String> = {
+            state.failover_ips.read().await.values().cloned().collect()
+        };
+
+        let in_grace = {
+            let st = state.inner.read().await;
+            st.startup.map(|s| s.elapsed().as_secs() <= crate::config::STARTUP_GRACE_SECS).unwrap_or(true)
+        };
+
+        // Verifica todos os servidores em paralelo
+        let handles: Vec<_> = servidores
+            .iter()
+            .map(|(id, ip)| {
+                let ip  = ip.clone();
+                let cfg = cfg.clone();
+                let id  = id.clone();
+                let hb  = {
+                    let hbs = state.heartbeats.try_read().ok()
+                        .and_then(|h| h.get(&id).copied());
+                    hbs
+                };
+                tokio::task::spawn_blocking(move || {
+                    let hb_ok = hb.map(|t| t.elapsed().as_secs() < 5).unwrap_or(false);
+                    if hb_ok {
+                        let mut info = verificar_rdp(&ip, &cfg);
+                        info.verificado = true;
+                        info
+                    } else {
+                        verificar_rdp(&ip, &cfg)
+                    }
+                })
+            })
+            .collect();
+
+        let results: Vec<RdpInfo> = futures::future::join_all(handles)
+            .await
+            .into_iter()
+            .map(|r| r.unwrap_or_default())
+            .collect();
+
+        let mut kills: Vec<(String, u32, String)> = Vec::new();
+
+        for ((id, ip), info) in servidores.iter().zip(results.iter()) {
+            if !info.ocupado || !info.verificado { continue; }
+
+            // Isenção 1: servidor está em uso como failover de um cliente legítimo
+            if failover_ips_ativos.contains(ip.as_str()) {
+                em_expulsao.retain(|k| !k.starts_with(&format!("{}:", ip)));
+                continue;
             }
-            Err(e) => {
-                tracing::error!(tentativa = attempt, servidor = %server_ip, erro = %e, "tsdiscon erro");
-                if attempt < 3 { std::thread::sleep(Duration::from_millis(500)); }
+
+            // Isenção 2: admin com RDP direto autorizado
+            let e_admin_autorizado = info.utilizador.eq_ignore_ascii_case(&cfg.rdp_user)
+                && admin_rdp.get(ip.as_str())
+                    .map(|t| t.elapsed().as_secs() < 600)
+                    .unwrap_or(false);
+
+            if e_admin_autorizado { continue; }
+
+            if !in_grace {
+                if let Some(sid) = info.sessao_id {
+                    if info.nome_sessao.starts_with("rdp-tcp#") {
+                        let chave = format!("{}:{}", ip, sid);
+                        if !em_expulsao.contains(&chave) {
+                            em_expulsao.insert(chave);
+                            tracing::warn!(
+                                servidor = %id,
+                                ip = %ip,
+                                utilizador = %info.utilizador,
+                                sessao_id = sid,
+                                "Acesso não autorizado em servidor WinCC/Reserva — a desconectar"
+                            );
+                            kills.push((ip.clone(), sid, info.utilizador.clone()));
+                        }
+                    }
+                }
             }
         }
+
+        // Limpar expulsões de sessões que já não existem
+        for ((_, ip), info) in servidores.iter().zip(results.iter()) {
+            if !info.ocupado {
+                em_expulsao.retain(|k| !k.starts_with(&format!("{}:", ip)));
+            } else if let Some(sid) = info.sessao_id {
+                let e_admin = info.utilizador.eq_ignore_ascii_case(&cfg.rdp_user)
+                    && admin_rdp.get(ip.as_str())
+                        .map(|t| t.elapsed().as_secs() < 600)
+                        .unwrap_or(false);
+                let e_failover = failover_ips_ativos.contains(ip.as_str());
+                if e_admin || e_failover {
+                    em_expulsao.remove(&format!("{}:{}", ip, sid));
+                }
+            }
+        }
+
+        for (ip, sid, utilizador) in kills {
+            let cfg = state.cfg.clone();
+            let db  = state.db.clone();
+            tokio::task::spawn_blocking(move || {
+                disconnect_unauthorized(&ip, sid, &utilizador, &cfg, &db);
+            });
+        }
+
+        sleep(poll_interval).await;
     }
 }
 
@@ -311,9 +474,9 @@ fn disconnect_unauthorized(
 pub fn broadcast_estado(st: &crate::state::AppStateInner, tx: &tokio::sync::broadcast::Sender<String>) {
     let json = serde_json::to_string(&serde_json::json!({
         "eclusas":          st.eclusas,
-        "sessoes":          { "cliente1": st.sessoes.cliente1, "cliente2": st.sessoes.cliente2 },
+        "sessoes":          { "eclusa_RG": st.sessoes.eclusa_RG, "eclusa_PN": st.sessoes.eclusa_PN },
         "rdp":              st.rdp,
-        "supervisoes":      { "cliente1": st.supervisoes.cliente1, "cliente2": st.supervisoes.cliente2 },
+        "supervisoes":      { "eclusa_RG": st.supervisoes.eclusa_RG, "eclusa_PN": st.supervisoes.eclusa_PN },
         "operadores":       st.operadores,
         "plc_health":       st.plc_health,
         "servidor_health":  st.servidor_health,

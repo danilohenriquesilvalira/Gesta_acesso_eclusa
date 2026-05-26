@@ -9,6 +9,7 @@ interface Props {
   conectando:      boolean;
   ehAdmin:         boolean;
   backendOnline:   boolean;
+  emReserva?:      string; // ID do reserva em uso ex: "Reserva01"
   onConectar:      () => void;
   onEncerrar:      () => void;
   onForcarEncerrar?: () => void;
@@ -24,7 +25,7 @@ function formatDur(s: number) {
 
 export default function EclusaAcessoCard({
   nomeEclusa, sessao, rdp,
-  conectando, ehAdmin, backendOnline, onConectar, onEncerrar, onForcarEncerrar, utilizadorAtual,
+  conectando, ehAdmin, backendOnline, emReserva, onConectar, onEncerrar, onForcarEncerrar, utilizadorAtual,
 }: Props) {
   // Clock local — só corre quando há sessão activa, não polui o App inteiro
   const [agora, setAgora] = useState(new Date());
@@ -49,24 +50,26 @@ export default function EclusaAcessoCard({
     );
   }
 
-  const inacessivel = !rdp.verificado;
-  const livre    = !inacessivel && !rdp.ocupado && !rdp.nao_autorizado;
-  const naoAutor = !inacessivel && rdp.nao_autorizado;
-  const operador = sessao.operador || (rdp.ocupado ? rdp.utilizador : "") || "";
-  const ehMinha  = sessao.conectado && sessao.operador.toLowerCase() === utilizadorAtual.toLowerCase();
+  // Em failover o servidor principal está offline — usa sessao como fonte de verdade
+  const emFailover  = !!emReserva;
+  const inacessivel = !emFailover && !rdp.verificado;
+  const ocupado     = emFailover ? sessao.conectado : rdp.ocupado;
+  const livre       = !inacessivel && !ocupado && !rdp.nao_autorizado;
+  const naoAutor    = !inacessivel && !emFailover && rdp.nao_autorizado;
+  const operador    = sessao.operador || (rdp.ocupado ? rdp.utilizador : "") || "";
+  const ehMinha     = sessao.conectado && sessao.operador.toLowerCase() === utilizadorAtual.toLowerCase();
 
   const isWhite = nomeEclusa === "RG" || nomeEclusa === "PN";
 
-  // EDP palette: Electric Green (#28FF52) em fundo escuro, Seaweed (#225E66) em fundo branco
   const accentColor = !backendOnline ? "#7C9599"
     : inacessivel ? "#7C9599"
     : naoAutor ? "#F7D200"
-    : rdp.ocupado ? "#E32C2C"
+    : ocupado ? "#E32C2C"
     : isWhite ? "#225E66" : "#28FF52";
   const statusLabel = !backendOnline ? "Sem Ligação"
     : inacessivel ? "Inacessível"
     : naoAutor ? "Não Autorizado"
-    : rdp.ocupado ? "Em Uso"
+    : ocupado ? "Em Uso"
     : "Disponível";
 
   const tempo = useMemo(() => {
@@ -91,6 +94,15 @@ export default function EclusaAcessoCard({
         <div>
           <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${isWhite ? "text-[#212E3E]/40" : "text-white/40"}`}>Controle de Acesso</p>
           <p className={`text-[32px] font-black leading-none mt-1 ${isWhite ? "text-[#212E3E]" : "text-white"}`}>{nomeEclusa}</p>
+          {emReserva && (
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span className="text-[10px] font-bold" style={{ color: "#F59E0B" }}>Via {emReserva}</span>
+            </div>
+          )}
         </div>
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold mt-0.5 ${isWhite ? "bg-slate-50 border border-slate-100" : "bg-white/[0.07]"}`}
           style={{ color: accentColor }}>
@@ -164,11 +176,12 @@ export default function EclusaAcessoCard({
           <div className="py-2.5 rounded-xl text-center text-[12px] font-bold text-amber-400/60 bg-amber-400/[0.08]">
             Aguardar saída do utilizador
           </div>
-        ) : (
+        ) : ocupado ? (
           <div className="flex flex-col gap-2">
             <div className={`py-2 rounded-xl text-center text-[11px] font-bold ${isWhite ? "text-white bg-[#991B1B]" : "text-white/30 bg-white/[0.05]"}`}>
               Sessão em Uso
             </div>
+            {/* Terminar a minha própria sessão (qualquer utilizador) */}
             {ehMinha && (
               <button
                 onClick={onEncerrar}
@@ -180,19 +193,20 @@ export default function EclusaAcessoCard({
                 Terminar Sessão
               </button>
             )}
-            {!ehMinha && ehAdmin && sessao.conectado && onForcarEncerrar && (
+            {/* Admin pode forçar qualquer sessão — própria ou alheia — enquanto RDP estiver ocupado */}
+            {ehAdmin && onForcarEncerrar && (
               <button
                 onClick={onForcarEncerrar}
                 className="w-full py-2 rounded-xl font-bold text-[12px] text-white transition-all cursor-pointer"
-                style={{ background: "#E32C2C" }}
+                style={{ background: ehMinha ? "rgba(227,44,44,0.7)" : "#E32C2C" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#b91c1c"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#E32C2C"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = ehMinha ? "rgba(227,44,44,0.7)" : "#E32C2C"; }}
               >
-                Forçar Desconexão
+                {ehMinha ? "Forçar Encerramento" : "Forçar Desconexão"}
               </button>
             )}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

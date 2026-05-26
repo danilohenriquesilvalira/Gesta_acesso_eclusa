@@ -23,8 +23,8 @@ const STATUS_META: Record<string, { label: string; cor: string }> = {
   inactive: { label: "Inativo",   cor: "#7C9599" },
 };
 const CLIENTE_LABEL: Record<string, string> = {
-  cliente1: "WinCC 1",
-  cliente2: "WinCC 2",
+  eclusa_RG: "Régua",
+  eclusa_PN: "Pocinho",
 };
 
 // Cache module-level — sobrevive a navegação entre páginas
@@ -145,7 +145,7 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
     } catch { /* sem ligação */ }
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (token) carregar(); }, [token]);
   useEffect(() => { setPage(1); }, [pesquisa]);
 
   // Auto-refresh quando há sessões activas (verifica a cada 8s)

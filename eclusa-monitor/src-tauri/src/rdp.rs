@@ -1,6 +1,6 @@
 use crate::config::load_config;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
 use tauri::Emitter;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -10,6 +10,10 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 // ── Estado dos processos shadow (PIDs) ────────────────────────────────────────
 
 pub struct ShadowState(pub Mutex<Vec<u32>>);
+
+// Suprime o evento "rdp-desconectado" durante transições de failover/retorno
+// para evitar que handleEncerrar apague a sessão no backend no momento errado.
+static SUPRIMIR_DESCONECTADO: AtomicBool = AtomicBool::new(false);
 
 // ── Windows API: lança mstsc com credenciais de rede (runas /netonly) ─────────
 
@@ -101,11 +105,16 @@ pub fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String
             .output();
     }
 
-    match Command::new("mstsc").args([&format!("/v:{ip}"), "/multimon", "/f"]).spawn() {
+    // /admin: reconecta sempre à sessão console — nunca cria sessão paralela.
+    // Garante que só existe uma sessão ativa por servidor em qualquer momento.
+    match Command::new("mstsc").args([&format!("/v:{ip}"), "/admin", "/f"]).spawn() {
         Ok(mut child) => {
             std::thread::spawn(move || {
                 let _ = child.wait();
-                let _ = app.emit("rdp-desconectado", cliente);
+                // Só emite se não estiver em transição de failover/retorno
+                if !SUPRIMIR_DESCONECTADO.swap(false, Ordering::SeqCst) {
+                    let _ = app.emit("rdp-desconectado", cliente);
+                }
             });
             String::new()
         }
@@ -113,9 +122,62 @@ pub fn connect_rdp(ip: String, cliente: String, app: tauri::AppHandle) -> String
     }
 }
 
-/// Fecha mstsc de operação silenciosamente.
+/// Abre RDP de diagnóstico admin direto a qualquer servidor.
+/// Regista autorização temporária na API para que o rdp_poll não expulse a sessão.
+#[tauri::command]
+pub fn connect_rdp_admin(ip: String, token: String) -> String {
+    let cfg = load_config();
+
+    // Notificar backend — autoriza sessão Administrator neste servidor por 10 min
+    let _ = std::thread::spawn({
+        let ip2    = ip.clone();
+        let token2 = token.clone();
+        let url    = format!("{}/admin/rdp-direto", cfg.api_url);
+        move || {
+            let body = format!("{{\"server_ip\":\"{}\",\"client_ip\":\"\"}}", ip2);
+            let _ = std::process::Command::new("curl")
+                .creation_flags(CREATE_NO_WINDOW)
+                .args([
+                    "-s", "-X", "POST", &url,
+                    "-H", "Content-Type: application/json",
+                    "-H", &format!("Authorization: Bearer {}", token2),
+                    "-d", &body,
+                ])
+                .output();
+        }
+    });
+
+    for target in [ip.as_str(), &format!("TERMSRV/{ip}")] {
+        let _ = Command::new("cmdkey")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args([
+                &format!("/generic:{target}"),
+                &format!("/user:{}", cfg.rdp_user),
+                &format!("/pass:{}", cfg.rdp_password),
+            ])
+            .output();
+    }
+
+    match Command::new("mstsc").args([&format!("/v:{ip}"), "/admin", "/f"]).spawn() {
+        Ok(_)  => String::new(),
+        Err(e) => format!("Erro ao abrir RDP: {e}"),
+    }
+}
+
+/// Fecha mstsc de operação normalmente — emite "rdp-desconectado".
 #[tauri::command]
 pub fn fechar_rdp() {
+    let _ = Command::new("taskkill")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["/F", "/IM", "mstsc.exe"])
+        .output();
+}
+
+/// Fecha mstsc durante transição de failover/retorno — NÃO emite "rdp-desconectado".
+/// Evita que handleEncerrar apague a sessão no backend no meio da transição.
+#[tauri::command]
+pub fn fechar_rdp_transicao() {
+    SUPRIMIR_DESCONECTADO.store(true, Ordering::SeqCst);
     let _ = Command::new("taskkill")
         .creation_flags(CREATE_NO_WINDOW)
         .args(["/F", "/IM", "mstsc.exe"])
@@ -130,12 +192,19 @@ pub fn connect_shadow(
     cliente:  String,
     #[allow(non_snake_case)]
     sessaoId: u32,
+    #[allow(non_snake_case)]
+    serverIp: Option<String>,
     state:    tauri::State<ShadowState>,
     app:      tauri::AppHandle,
 ) -> String {
     let cfg = load_config();
 
-    let ip = if cliente == "cliente1" { &cfg.ip_cliente1 } else { &cfg.ip_cliente2 }.clone();
+    // Usa IP fornecido pela API (pode ser reserva em failover); fallback para config
+    let ip = serverIp
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            if cliente == "eclusa_RG" { cfg.ip_cliente1.clone() } else { cfg.ip_cliente2.clone() }
+        });
     if ip.is_empty() {
         return format!("{cliente}: IP não configurado");
     }

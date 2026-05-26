@@ -41,6 +41,8 @@ pub struct AppState {
     pub cfg:          Config,
     /// RDP client list (id → ip), loaded once at startup
     pub rdp_clients:  Vec<RdpClient>,
+    /// Servidores WinCC conhecidos (id → ip) — usados para firewall
+    pub servidores:   Vec<RdpClient>,
     /// Force-logout map: username → unix timestamp — tokens issued before this are rejected
     pub force_logout: RwLock<HashMap<String, i64>>,
     /// In-memory JTI revocation cache: jti → expiry unix timestamp.
@@ -48,6 +50,13 @@ pub struct AppState {
     pub revoked_jtis: RwLock<HashMap<String, i64>>,
     /// Ultimo heartbeat recebido por cliente (wincc-agent instalado em cada Windows Server)
     pub heartbeats: RwLock<HashMap<String, Instant>>,
+    /// IPs autorizados temporariamente para RDP admin direto (expiram em 10 min)
+    /// Chave: "server_ip:client_ip", valor: Instant de quando foi autorizado
+    pub admin_rdp: RwLock<HashMap<String, Instant>>,
+    /// IP de failover ativo por cliente: "eclusa_RG" → "172.29.164.15"
+    /// Quando presente, rdp_poll_loop monitoriza este IP em vez do IP principal.
+    /// Limpo quando o servidor original volta online.
+    pub failover_ips: RwLock<HashMap<String, String>>,
 }
 
 impl AppState {
@@ -58,6 +67,7 @@ impl AppState {
         eclusas:  serde_json::Value,
     ) -> Arc<Self> {
         let rdp_clients = load_rdp_clients();
+        let servidores  = load_servidores();
 
         // Inicializa servidor_health com todos os servidores conhecidos (todos offline até heartbeat)
         let servidor_health: ServidorHealthMap = load_servidores()
@@ -93,10 +103,13 @@ impl AppState {
             sse_tx,
             frame_tx,
             rdp_clients,
+            servidores,
             cfg,
             force_logout:  RwLock::new(HashMap::new()),
             revoked_jtis:  RwLock::new(HashMap::new()),
             heartbeats:    RwLock::new(HashMap::new()),
+            admin_rdp:     RwLock::new(HashMap::new()),
+            failover_ips:  RwLock::new(HashMap::new()),
         })
     }
 

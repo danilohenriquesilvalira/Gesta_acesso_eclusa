@@ -16,7 +16,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             config::get_config,
             rdp::connect_rdp,
+            rdp::connect_rdp_admin,
             rdp::fechar_rdp,
+            rdp::fechar_rdp_transicao,
             rdp::connect_shadow,
             rdp::fechar_shadow,
         ])

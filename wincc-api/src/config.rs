@@ -8,7 +8,7 @@ pub fn eclusas_file_path() -> String {
 // ── Timings ───────────────────────────────────────────────────────────────────
 
 /// Intervalo entre polls RDP (ms)
-pub const RDP_POLL_MS:            u64 = 1_500;
+pub const RDP_POLL_MS:            u64 = 500;
 /// Segundos de graça após arranque antes de penalizar acessos não registados
 #[allow(dead_code)]
 pub const STARTUP_GRACE_SECS:     u64 = 30;
@@ -38,8 +38,7 @@ pub struct Config {
     pub api_port:     String,
     #[allow(dead_code)] pub ssh_key_path: String,
     #[allow(dead_code)] pub ssh_port:     u16,
-    /// IP do servidor WinCC de reserva — usado no failover automático
-    pub reserva_ip:   String,
+    #[allow(dead_code)] pub reserva_ip:   String,
 }
 
 pub fn load_config() -> Config {
@@ -76,15 +75,16 @@ pub struct RdpClient {
 pub fn load_rdp_clients() -> Vec<RdpClient> {
     vec![
         RdpClient {
-            id: "cliente1".into(),
-            ip: std::env::var("CLIENT1_IP").unwrap_or_else(|_| "172.29.164.49".into()),
+            id: "eclusa_RG".into(),
+            ip: std::env::var("SRV_RG_IP").unwrap_or_else(|_| "172.29.164.13".into()),
         },
         RdpClient {
-            id: "cliente2".into(),
-            ip: std::env::var("CLIENT2_IP").unwrap_or_else(|_| "172.29.164.51".into()),
+            id: "eclusa_PN".into(),
+            ip: std::env::var("SRV_PN_IP").unwrap_or_else(|_| "172.29.164.14".into()),
         },
     ]
 }
+
 
 /// Servidores Windows conhecidos — cada um corre wincc-agent.
 /// IDs coincidem com o campo "servidor" no config.json do agente.

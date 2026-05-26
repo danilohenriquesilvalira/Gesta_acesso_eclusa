@@ -1,45 +1,61 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { Estado } from "../types";
+import type { Estado, ServidorHealth } from "../types";
 
-export type FailoverPayload = { cliente: string; ip_reserva: string };
+export type FailoverPayload  = { cliente: string; ip_reserva: string; id_reserva?: string };
+export type VoltouPayload    = { servidor: string; ip_original: string; cliente_key?: string; reconectar_auto?: boolean; operador?: string };
 
-// /estado e /eventos são públicos — não requerem token
-export function useEstado(apiUrl: string, ipReserva: string, onFailover?: (p: FailoverPayload) => void) {
-  const [estado, setEstado] = useState<Estado | null>(null);
-  const [apiOk,  setApiOk]  = useState<boolean | null>(null);
-  const onFailoverRef   = useRef(onFailover);
-  const ipReservaRef    = useRef(ipReserva);
-  const disparadoRef    = useRef<Record<string, boolean>>({});
+export function useEstado(
+  apiUrl:      string,
+  _ipReserva:  string,
+  onFailover?: (p: FailoverPayload) => void,
+  onVoltou?:   (p: VoltouPayload)   => void,
+) {
+  const [estado,          setEstado]          = useState<Estado | null>(null);
+  const [servidorHealth,  setServidorHealth]  = useState<Record<string, ServidorHealth>>({});
+  const [apiOk,           setApiOk]           = useState<boolean | null>(null);
+
+  const onFailoverRef  = useRef(onFailover);
+  const onVoltouRef    = useRef(onVoltou);
+  const disparadoRef   = useRef<Record<string, boolean>>({});
+  const shRef          = useRef<Record<string, ServidorHealth>>({});
 
   onFailoverRef.current = onFailover;
-  ipReservaRef.current  = ipReserva;
+  onVoltouRef.current   = onVoltou;
 
   const processarEstado = useCallback((json: Estado) => {
-    setEstado(json);
-    setApiOk(true);
-
-    // Detetar servidor inacessível pelo estado normal — não depende do evento SSE failover
-    // que pode ser perdido durante reconexão do EventSource
-    const clientes = ["cliente1", "cliente2"] as const;
-    for (const cliente of clientes) {
-      const rdp = json.rdp?.[cliente];
-      if (!rdp) continue;
-
-      if (!rdp.verificado) {
-        // Servidor inacessível — acionar failover se ainda não disparado para este cliente
-        if (!disparadoRef.current[cliente]) {
-          disparadoRef.current[cliente] = true;
-          onFailoverRef.current?.({ cliente, ip_reserva: ipReservaRef.current });
+    // ── servidor_health — só atualiza estado React se windows_vivo/wincc_vivo mudou
+    if (json.servidor_health) {
+      let mudou = false;
+      for (const [id, h] of Object.entries(json.servidor_health)) {
+        const prev = shRef.current[id];
+        if (!prev || prev.windows_vivo !== h.windows_vivo || prev.wincc_vivo !== h.wincc_vivo) {
+          mudou = true;
+          break;
         }
-      } else {
-        // Servidor voltou — resetar flag para próxima queda
-        disparadoRef.current[cliente] = false;
       }
+      shRef.current = json.servidor_health;
+      if (mudou) setServidorHealth({ ...json.servidor_health });
     }
+
+    // ── estado principal — só atualiza se sessoes/rdp/eclusas/supervisoes mudaram
+    setEstado(prev => {
+      if (!prev) return json;
+      if (
+        JSON.stringify(json.sessoes)            === JSON.stringify(prev.sessoes)          &&
+        JSON.stringify(json.rdp)                === JSON.stringify(prev.rdp)              &&
+        JSON.stringify(json.supervisoes)        === JSON.stringify(prev.supervisoes)       &&
+        JSON.stringify(json.operadores)         === JSON.stringify(prev.operadores)        &&
+        JSON.stringify(json.eclusas?.eclusas)   === JSON.stringify(prev.eclusas?.eclusas) &&
+        JSON.stringify(json.plc_health)         === JSON.stringify(prev.plc_health)
+      ) return prev;
+      return json;
+    });
+
+    setApiOk(true);
   }, []);
 
   const fetchEstado = useCallback(() => {
-    const ac = new AbortController();
+    const ac    = new AbortController();
     const timer = setTimeout(() => ac.abort(), 4_000);
     fetch(`${apiUrl}/estado`, { signal: ac.signal })
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Estado>; })
@@ -56,23 +72,40 @@ export function useEstado(apiUrl: string, ipReserva: string, onFailover?: (p: Fa
     es.onmessage = e => {
       try {
         const json = JSON.parse(e.data);
-        // Evento failover explícito do backend — reforço adicional
         if (json._event === "failover") {
-          if (!disparadoRef.current[json.cliente]) {
-            disparadoRef.current[json.cliente] = true;
-            onFailoverRef.current?.({ cliente: json.cliente, ip_reserva: json.ip_reserva });
+          if (!disparadoRef.current[json.servidor ?? json.cliente]) {
+            disparadoRef.current[json.servidor ?? json.cliente] = true;
+            onFailoverRef.current?.({ cliente: json.cliente ?? json.servidor, ip_reserva: json.ip_reserva, id_reserva: json.id_reserva });
           }
+          return;
+        }
+        if (json._event === "servidor_voltou") {
+          delete disparadoRef.current[json.servidor];
+          onVoltouRef.current?.({
+            servidor:        json.servidor,
+            ip_original:     json.ip_original,
+            cliente_key:     json.cliente_key,
+            reconectar_auto: json.reconectar_auto ?? false,
+            operador:        json.operador,
+          });
           return;
         }
         processarEstado(json as Estado);
       } catch { /* ignore */ }
     };
 
-    es.onerror = () => setApiOk(false);
+    es.onerror = () => {
+      setApiOk(false);
+      // SSE caiu — poll a cada 5s até reconectar (não 2s para não stressar)
+    };
 
-    const poll = setInterval(fetchEstado, 2_000);
+    // Poll apenas como fallback quando SSE cai — intervalo longo
+    const poll = setInterval(() => {
+      if (es.readyState === EventSource.CLOSED) fetchEstado();
+    }, 5_000);
+
     return () => { es.close(); clearInterval(poll); };
   }, [apiUrl, fetchEstado, processarEstado]);
 
-  return { estado, apiOk, fetchEstado };
+  return { estado, servidorHealth, apiOk, fetchEstado };
 }

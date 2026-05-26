@@ -15,17 +15,20 @@ pub async fn iniciar_supervisao(
     _auth:     AuthUser,
     Json(req): Json<SupervisaoReq>,
 ) -> Json<Value> {
-    if !["cliente1", "cliente2"].contains(&req.cliente.as_str()) {
+    if !["eclusa_RG", "eclusa_PN"].contains(&req.cliente.as_str()) {
         return Json(serde_json::json!({"ok": false, "erro": "Cliente inválido"}));
     }
 
 
     // Verificar sessão RDP activa (read lock rápido)
     let (sessao_id, server_ip) = {
-        let st = s.inner.read().await;
+        let st  = s.inner.read().await;
         let sid = st.rdp.get(&req.cliente)
             .and_then(|r| if r.ocupado { r.sessao_id } else { None });
-        let ip  = s.rdp_client_ip(&req.cliente).unwrap_or("").to_string();
+        // Em failover usa o IP do reserva, caso contrário o IP original
+        let ip = s.failover_ips.read().await
+            .get(&req.cliente).cloned()
+            .unwrap_or_else(|| s.rdp_client_ip(&req.cliente).unwrap_or("").to_string());
         match sid {
             Some(id) => (id, ip),
             None => return Json(serde_json::json!({
@@ -38,10 +41,10 @@ pub async fn iniciar_supervisao(
     // Write lock — adiciona supervisor à lista
     let total = {
         let mut st = s.inner.write().await;
-        let sups = if req.cliente == "cliente1" {
-            &mut st.supervisoes.cliente1
+        let sups = if req.cliente == "eclusa_RG" {
+            &mut st.supervisoes.eclusa_RG
         } else {
-            &mut st.supervisoes.cliente2
+            &mut st.supervisoes.eclusa_PN
         };
 
         // Idempotente: se supervisor já está na lista, devolve OK com a sessão
@@ -79,16 +82,16 @@ pub async fn encerrar_supervisao(
     auth:      AuthUser,
     Json(req): Json<EncerrarSupervisaoReq>,
 ) -> Json<Value> {
-    if !["cliente1", "cliente2"].contains(&req.cliente.as_str()) {
+    if !["eclusa_RG", "eclusa_PN"].contains(&req.cliente.as_str()) {
         return Json(serde_json::json!({"ok": false, "erro": "Cliente inválido"}));
     }
 
     {
         let mut st = s.inner.write().await;
-        let sups = if req.cliente == "cliente1" {
-            &mut st.supervisoes.cliente1
+        let sups = if req.cliente == "eclusa_RG" {
+            &mut st.supervisoes.eclusa_RG
         } else {
-            &mut st.supervisoes.cliente2
+            &mut st.supervisoes.eclusa_PN
         };
         sups.retain(|s| !s.supervisor.eq_ignore_ascii_case(&req.supervisor));
         broadcast_estado(&st, &s.sse_tx);

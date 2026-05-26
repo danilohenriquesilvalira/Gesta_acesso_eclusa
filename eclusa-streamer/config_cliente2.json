@@ -1,7 +1,0 @@
-{
-  "api_url":     "http://172.29.164.10:8080",
-  "cliente":     "cliente2",
-  "fps_max":     20,
-  "qualidade":   75,
-  "max_largura": 1920
-}

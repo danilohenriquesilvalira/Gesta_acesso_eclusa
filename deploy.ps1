@@ -73,7 +73,7 @@ Ok "Ficheiros copiados"
 
 # -- 3. Build da imagem Docker -------------------------------------------------
 Passo "A compilar wincc-api (~40s com cache, ~5min primeira vez)..."
-Invoke-SSH "cd $SERVIDOR_PATH && docker build -t $IMAGEM ./wincc-api"
+Invoke-SSH "cd $SERVIDOR_PATH && docker build --no-cache -t $IMAGEM ./wincc-api"
 Ok "Imagem compilada"
 
 # -- 4. Parar e remover container antigo --------------------------------------

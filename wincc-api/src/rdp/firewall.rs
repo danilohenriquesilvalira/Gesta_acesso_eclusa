@@ -29,8 +29,13 @@ pub fn desbloquear_ip(server_ip: &str, client_ip: &str, cfg: &Config) {
     std::thread::sleep(Duration::from_secs(1));
 }
 
-/// Limpa bloqueios no arranque — netsh não tem wildcard, ignora (tsdiscon resolve).
-pub fn limpar_todos_bloqueios(server_ip: &str, _cfg: &Config) {
+/// Limpa todas as regras EDP-Block-RDP-* no arranque — garante estado limpo mesmo após crash.
+/// netsh não suporta wildcards — usa PowerShell para apagar por prefixo no Name.
+pub fn limpar_todos_bloqueios(server_ip: &str, cfg: &Config) {
+    run_remote_cmd(server_ip,
+        "powershell -Command \"Get-NetFirewallRule | Where-Object { $_.Name -like 'EDP-Block-RDP-*' } | Remove-NetFirewallRule\"",
+        cfg
+    );
     tracing::info!(server_ip = %server_ip, "Bloqueios de firewall limpos no arranque");
 }
 
@@ -47,7 +52,9 @@ pub fn configurar_shadow(server_ip: &str, cfg: &Config) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn rule_name_for(client_ip: &str) -> String {
-    format!("EDP-Block-RDP-{}", client_ip.replace('.', "-"))
+    // Remove sufixo CIDR (/32, /24, etc.) que o PostgreSQL INET adiciona ao devolver o IP
+    let ip = client_ip.split('/').next().unwrap_or(client_ip).trim();
+    format!("EDP-Block-RDP-{}", ip.replace('.', "-"))
 }
 
 /// Executa comando nativo num servidor Windows remoto.

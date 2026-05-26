@@ -19,12 +19,22 @@ pub async fn create_pool(database_url: &str) -> PgPool {
         .expect("Falha ao criar pool PostgreSQL — verifica DATABASE_URL em .env")
 }
 
-/// Verifica que o schema está aplicado (falha rápido no startup)
+/// Verifica que o schema está aplicado e aplica migrações incrementais.
 pub async fn verify_schema(pool: &PgPool) {
     sqlx::query("SELECT COUNT(*) FROM users")
         .fetch_one(pool)
         .await
         .expect("Schema PostgreSQL em falta — executa infra/db/schema.sql primeiro");
+
+    // Migração incremental — adiciona colunas de contexto ao bloqueio automático
+    for stmt in [
+        "ALTER TABLE ip_blacklist ADD COLUMN IF NOT EXISTS servidor_ip INET",
+        "ALTER TABLE ip_blacklist ADD COLUMN IF NOT EXISTS utilizador  TEXT",
+    ] {
+        if let Err(e) = sqlx::query(stmt).execute(pool).await {
+            tracing::warn!(erro = %e, stmt = stmt, "Migração incremental falhou (não crítico)");
+        }
+    }
 }
 
 /// Carrega lista de operadores activos para memória (usado no arranque)
