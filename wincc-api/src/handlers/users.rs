@@ -30,21 +30,6 @@ pub async fn auth_login(
         return Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}));
     }
 
-    // Verificar IP não bloqueado
-    let ip_blocked: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM ip_blacklist \
-         WHERE ip = $1::inet AND active = TRUE \
-         AND (expires_at IS NULL OR expires_at > NOW()))"
-    )
-    .bind(&caller_ip)
-    .fetch_one(&s.db)
-    .await
-    .unwrap_or(false);
-
-    if ip_blocked {
-        return Json(serde_json::json!({"ok": false, "erro": "IP bloqueado"}));
-    }
-
     // Buscar utilizador no PostgreSQL
     let row = sqlx::query(
         "SELECT password_hash, role::text AS role, status::text AS status FROM users WHERE username = $1"
@@ -92,6 +77,37 @@ pub async fn auth_login(
         Ok(t)  => t,
         Err(e) => return Json(serde_json::json!({"ok": false, "erro": format!("Erro JWT: {}", e)})),
     };
+
+    // Desbloquear IP do caller em todos os servidores — login bem-sucedido anula bloqueios acidentais
+    // (crash do app Tauri, falha de rede, transição de failover mal orquestrada, etc.)
+    {
+        let cfg         = s.cfg.clone();
+        let caller_ip_u = caller_ip.clone();
+        let todos_ips: Vec<String> = s.rdp_clients.iter().map(|c| c.ip.clone())
+            .chain(s.servidores.iter().map(|sv| sv.ip.clone()))
+            .collect();
+        let db_u = s.db.clone();
+        let user_u = username.clone();
+        tokio::task::spawn_blocking(move || {
+            for server_ip in &todos_ips {
+                desbloquear_ip_firewall(server_ip, &caller_ip_u, &cfg);
+            }
+            // Remove da blacklist DB também
+            let rt = tokio::runtime::Handle::current();
+            rt.spawn(async move {
+                let _ = sqlx::query(
+                    "UPDATE ip_blacklist SET active = FALSE, expires_at = NOW() \
+                     WHERE ip = $1::inet AND active = TRUE"
+                )
+                .bind(&caller_ip_u)
+                .execute(&db_u)
+                .await;
+                log_evento_com_ip(&db_u, "ip_desbloqueado",
+                    &format!("IP desbloqueado após login bem-sucedido: utilizador '{}'", user_u),
+                    &caller_ip_u).await;
+            });
+        });
+    }
 
     // Actualizar last_login e audit log em background
     let db   = s.db.clone();
@@ -158,20 +174,20 @@ pub async fn list_usuarios(State(s): State<Shared>, _admin: AdminUser) -> Json<V
     };
 
     // Sessões activas em memória — read lock curto
-    let (op_c1, op_c2) = {
+    let (op_rg, op_pn) = {
         let st = s.inner.read().await;
         (
-            if st.sessoes.cliente1.conectado { st.sessoes.cliente1.operador.to_lowercase() } else { String::new() },
-            if st.sessoes.cliente2.conectado { st.sessoes.cliente2.operador.to_lowercase() } else { String::new() },
+            if st.sessoes.eclusa_RG.conectado { st.sessoes.eclusa_RG.operador.to_lowercase() } else { String::new() },
+            if st.sessoes.eclusa_PN.conectado { st.sessoes.eclusa_PN.operador.to_lowercase() } else { String::new() },
         )
     };
 
     let users: Vec<Value> = rows.iter().map(|r| {
         let uname: String = sqlx::Row::try_get(r, "username").unwrap_or_default();
-        let (sessao_ativa, cliente_ativo) = if !op_c1.is_empty() && op_c1 == uname.to_lowercase() {
-            (true, Some("cliente1"))
-        } else if !op_c2.is_empty() && op_c2 == uname.to_lowercase() {
-            (true, Some("cliente2"))
+        let (sessao_ativa, cliente_ativo) = if !op_rg.is_empty() && op_rg == uname.to_lowercase() {
+            (true, Some("eclusa_RG"))
+        } else if !op_pn.is_empty() && op_pn == uname.to_lowercase() {
+            (true, Some("eclusa_PN"))
         } else {
             (false, None)
         };
@@ -404,7 +420,7 @@ pub async fn delete_usuario(
 /// GET /blacklist
 pub async fn list_blacklist(State(s): State<Shared>, _admin: AdminUser) -> Json<Value> {
     let rows = match sqlx::query(
-        "SELECT id, ip::text, reason, created_at, expires_at, active \
+        "SELECT id, ip::text, reason, servidor_ip::text, utilizador, created_at, active \
          FROM ip_blacklist ORDER BY created_at DESC LIMIT 200"
     )
     .fetch_all(&s.db).await
@@ -417,12 +433,14 @@ pub async fn list_blacklist(State(s): State<Shared>, _admin: AdminUser) -> Json<
     };
 
     let list: Vec<Value> = rows.iter().map(|r| serde_json::json!({
-        "id":         sqlx::Row::try_get::<i32,_>(r, "id").unwrap_or(0),
-        "ip":         sqlx::Row::try_get::<String,_>(r, "ip").unwrap_or_default(),
-        "reason":     sqlx::Row::try_get::<Option<String>,_>(r, "reason").ok().flatten(),
-        "active":     sqlx::Row::try_get::<bool,_>(r, "active").unwrap_or(false),
-        "created_at": sqlx::Row::try_get::<chrono::DateTime<Utc>,_>(r, "created_at")
-                          .ok().map(|t| t.to_rfc3339()),
+        "id":          sqlx::Row::try_get::<i32,_>(r, "id").unwrap_or(0),
+        "ip":          sqlx::Row::try_get::<String,_>(r, "ip").unwrap_or_default(),
+        "reason":      sqlx::Row::try_get::<Option<String>,_>(r, "reason").ok().flatten(),
+        "servidor_ip": sqlx::Row::try_get::<Option<String>,_>(r, "servidor_ip").ok().flatten(),
+        "utilizador":  sqlx::Row::try_get::<Option<String>,_>(r, "utilizador").ok().flatten(),
+        "active":      sqlx::Row::try_get::<bool,_>(r, "active").unwrap_or(false),
+        "created_at":  sqlx::Row::try_get::<chrono::DateTime<Utc>,_>(r, "created_at")
+                           .ok().map(|t| t.to_rfc3339()),
     })).collect();
 
     Json(serde_json::json!(list))
@@ -454,15 +472,15 @@ pub async fn add_blacklist(
                     &format!("IP '{}' bloqueado — motivo: {} — por '{}'", ip, mot, quem)).await;
             });
 
-            // Aplicar regra no firewall de TODOS os servidores RDP
+            // Aplicar regra no firewall — cada servidor em thread própria para não bloquear
             let cfg     = s.cfg.clone();
             let ip_bl   = req.ip.clone();
-            let servers: Vec<String> = s.rdp_clients.iter().map(|c| c.ip.clone()).collect();
-            tokio::task::spawn_blocking(move || {
-                for srv in servers {
-                    bloquear_ip(&srv, &ip_bl, &cfg);
-                }
-            });
+            let servers: Vec<String> = s.servidores.iter().map(|c| c.ip.clone()).collect();
+            for srv in servers {
+                let cfg2   = cfg.clone();
+                let ip2    = ip_bl.clone();
+                tokio::task::spawn_blocking(move || bloquear_ip(&srv, &ip2, &cfg2));
+            }
 
             Json(serde_json::json!({"ok": true}))
         }
@@ -498,15 +516,15 @@ pub async fn remove_blacklist(
                     &format!("Bloqueio de IP (id={}) levantado — por '{}'", id, quem)).await;
             });
 
-            // Remover regra do firewall de TODOS os servidores RDP
+            // Remover regra do firewall — cada servidor em thread própria para não bloquear
             if let Some(ip_bl) = ip_entry {
                 let cfg     = s.cfg.clone();
-                let servers: Vec<String> = s.rdp_clients.iter().map(|c| c.ip.clone()).collect();
-                tokio::task::spawn_blocking(move || {
-                    for srv in servers {
-                        desbloquear_ip_firewall(&srv, &ip_bl, &cfg);
-                    }
-                });
+                let servers: Vec<String> = s.servidores.iter().map(|c| c.ip.clone()).collect();
+                for srv in servers {
+                    let cfg2 = cfg.clone();
+                    let ip2  = ip_bl.clone();
+                    tokio::task::spawn_blocking(move || desbloquear_ip_firewall(&srv, &ip2, &cfg2));
+                }
             }
 
             Json(serde_json::json!({"ok": true}))
@@ -544,14 +562,14 @@ pub async fn admin_force_logout(
     {
         let mut st = s.inner.write().await;
 
-        let cliente_alvo = if st.sessoes.cliente1.conectado
-            && st.sessoes.cliente1.operador.to_lowercase() == username
+        let cliente_alvo = if st.sessoes.eclusa_RG.conectado
+            && st.sessoes.eclusa_RG.operador.to_lowercase() == username
         {
-            Some("cliente1")
-        } else if st.sessoes.cliente2.conectado
-            && st.sessoes.cliente2.operador.to_lowercase() == username
+            Some("eclusa_RG")
+        } else if st.sessoes.eclusa_PN.conectado
+            && st.sessoes.eclusa_PN.operador.to_lowercase() == username
         {
-            Some("cliente2")
+            Some("eclusa_PN")
         } else {
             None
         };
@@ -562,12 +580,12 @@ pub async fn admin_force_logout(
                 .and_then(|r| r.sessao_id)
                 .and_then(|sid| s.rdp_client_ip(cliente).map(|ip| (ip.to_string(), sid)));
 
-            if cliente == "cliente1" {
-                st.sessoes.cliente1 = Default::default();
-                st.supervisoes.cliente1.clear();
+            if cliente == "eclusa_RG" {
+                st.sessoes.eclusa_RG = Default::default();
+                st.supervisoes.eclusa_RG.clear();
             } else {
-                st.sessoes.cliente2 = Default::default();
-                st.supervisoes.cliente2.clear();
+                st.sessoes.eclusa_PN = Default::default();
+                st.supervisoes.eclusa_PN.clear();
             }
             sessao_encerrada = Some(cliente.to_string());
             broadcast_estado(&st, &s.sse_tx);

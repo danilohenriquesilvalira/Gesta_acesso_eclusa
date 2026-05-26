@@ -29,8 +29,8 @@ pub async fn sse_eventos(State(s): State<Shared>) -> Sse<impl Stream<Item = Resu
 pub async fn get_sessoes(State(s): State<Shared>) -> Json<Value> {
     let st = s.inner.read().await;
     Json(serde_json::json!({
-        "cliente1": st.sessoes.cliente1,
-        "cliente2": st.sessoes.cliente2
+        "eclusa_RG": st.sessoes.eclusa_RG,
+        "eclusa_PN": st.sessoes.eclusa_PN
     }))
 }
 
@@ -38,10 +38,10 @@ pub async fn get_sessoes(State(s): State<Shared>) -> Json<Value> {
 pub async fn get_estado(State(s): State<Shared>) -> Json<Value> {
     let st = s.inner.read().await;
     Json(serde_json::json!({
-        "eclusas":     st.eclusas,   // da memória — sem I/O de disco
-        "sessoes":     { "cliente1": st.sessoes.cliente1, "cliente2": st.sessoes.cliente2 },
+        "eclusas":     st.eclusas,
+        "sessoes":     { "eclusa_RG": st.sessoes.eclusa_RG, "eclusa_PN": st.sessoes.eclusa_PN },
         "rdp":         st.rdp,
-        "supervisoes": { "cliente1": st.supervisoes.cliente1, "cliente2": st.supervisoes.cliente2 },
+        "supervisoes": { "eclusa_RG": st.supervisoes.eclusa_RG, "eclusa_PN": st.supervisoes.eclusa_PN },
         "operadores":  st.operadores,
         "plc_health":  st.plc_health,
         "timestamp":   now()
@@ -51,26 +51,27 @@ pub async fn get_estado(State(s): State<Shared>) -> Json<Value> {
 /// GET /sessoes/simples — formato texto para VBScript WinCC (sem auth — LAN only)
 pub async fn sessoes_simples(State(s): State<Shared>) -> String {
     let st = s.inner.read().await;
-    let rdp1 = st.rdp.get("cliente1").map(|r| r.ocupado).unwrap_or(false);
-    let rdp2 = st.rdp.get("cliente2").map(|r| r.ocupado).unwrap_or(false);
+    let rdp_rg = st.rdp.get("eclusa_RG").map(|r| r.ocupado).unwrap_or(false);
+    let rdp_pn = st.rdp.get("eclusa_PN").map(|r| r.ocupado).unwrap_or(false);
     format!(
-        "Cliente1={}\nCliente2={}\nCliente1_RDP={}\nCliente2_RDP={}\n",
-        st.sessoes.cliente1.operador,
-        st.sessoes.cliente2.operador,
-        if rdp1 { "1" } else { "0" },
-        if rdp2 { "1" } else { "0" },
+        "EclusaRG={}\nEclusaPN={}\nEclusaRG_RDP={}\nEclusaPN_RDP={}\n",
+        st.sessoes.eclusa_RG.operador,
+        st.sessoes.eclusa_PN.operador,
+        if rdp_rg { "1" } else { "0" },
+        if rdp_pn { "1" } else { "0" },
     )
 }
 
 /// GET /sessoes/shadow — IDs e IPs das sessões RDP activas (sem auth — LAN only)
 pub async fn shadow_simples(State(s): State<Shared>) -> String {
-    let st = s.inner.read().await;
+    let st           = s.inner.read().await;
+    let failover_ips = s.failover_ips.read().await;
 
-    let (sid1, ip1) = rdp_shadow_info(&st.rdp, "cliente1", &s);
-    let (sid2, ip2) = rdp_shadow_info(&st.rdp, "cliente2", &s);
+    let (sid1, ip1) = rdp_shadow_info(&st.rdp, "eclusa_RG", &s, &failover_ips);
+    let (sid2, ip2) = rdp_shadow_info(&st.rdp, "eclusa_PN", &s, &failover_ips);
 
     format!(
-        "Cliente1_SessaoId={}\nCliente1_Server={}\nCliente2_SessaoId={}\nCliente2_Server={}\n",
+        "EclusaRG_SessaoId={}\nEclusaRG_Server={}\nEclusaPN_SessaoId={}\nEclusaPN_Server={}\n",
         sid1, ip1, sid2, ip2
     )
 }
@@ -91,7 +92,7 @@ pub async fn iniciar(
     let caller_ip = addr.ip().to_string();
 
     // Validar cliente
-    if !["cliente1", "cliente2"].contains(&req.cliente.as_str()) {
+    if !["eclusa_RG", "eclusa_PN"].contains(&req.cliente.as_str()) {
         return Json(serde_json::json!({"ok": false, "erro": "Cliente inválido"}));
     }
 
@@ -111,29 +112,14 @@ pub async fn iniciar(
         None    => return Json(serde_json::json!({"ok": false, "erro": "Utilizador não encontrado"})),
     }
 
-    // Verificar IP não bloqueado
-    let ip_blocked: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM ip_blacklist \
-         WHERE ip = $1::inet AND active = TRUE \
-         AND (expires_at IS NULL OR expires_at > NOW()))"
-    )
-    .bind(&caller_ip)
-    .fetch_one(&s.db)
-    .await
-    .unwrap_or(false);
-
-    if ip_blocked {
-        return Json(serde_json::json!({"ok": false, "erro": "IP bloqueado"}));
-    }
-
     // ── CHECK-AND-SET ATÓMICO ──
     // Write lock desde o início: verificação + escrita numa operação indivisível.
     // Garante que dois requests simultâneos nunca colocam dois operadores no mesmo cliente.
     let mut st = s.inner.write().await;
 
     // Verificar operador não está noutro cliente
-    let outro = if req.cliente == "cliente1" { "cliente2" } else { "cliente1" };
-    let sessao_outro = if outro == "cliente1" { &st.sessoes.cliente1 } else { &st.sessoes.cliente2 };
+    let outro = if req.cliente == "eclusa_RG" { "eclusa_PN" } else { "eclusa_RG" };
+    let sessao_outro = if outro == "eclusa_RG" { &st.sessoes.eclusa_RG } else { &st.sessoes.eclusa_PN };
     if sessao_outro.conectado && sessao_outro.operador.eq_ignore_ascii_case(&req.operador) {
         return Json(serde_json::json!({
             "ok": false,
@@ -141,12 +127,12 @@ pub async fn iniciar(
         }));
     }
 
-    // Verificar cliente está livre
-    let sessao_atual = if req.cliente == "cliente1" { &st.sessoes.cliente1 } else { &st.sessoes.cliente2 };
-    if sessao_atual.conectado {
+    // Verificar cliente está livre — ou é o mesmo operador a retomar (failover/retorno)
+    let sessao_atual = if req.cliente == "eclusa_RG" { &st.sessoes.eclusa_RG } else { &st.sessoes.eclusa_PN };
+    if sessao_atual.conectado && !sessao_atual.operador.eq_ignore_ascii_case(&req.operador) {
         return Json(serde_json::json!({
             "ok": false,
-            "erro": format!("Cliente {} ocupado por {}", req.cliente, sessao_atual.operador)
+            "erro": format!("Eclusa {} ocupada por {}", req.cliente, sessao_atual.operador)
         }));
     }
 
@@ -162,13 +148,23 @@ pub async fn iniciar(
         timestamp_inicio: now(),
         conectado:        true,
     };
-    if req.cliente == "cliente1" {
-        st.sessoes.cliente1 = nova;
+    if req.cliente == "eclusa_RG" {
+        st.sessoes.eclusa_RG = nova;
     } else {
-        st.sessoes.cliente2 = nova;
+        st.sessoes.eclusa_PN = nova;
     }
     broadcast_estado(&st, &s.sse_tx);
-    // Write lock liberto aqui — duração mínima ✓
+    drop(st); // liberta write lock antes de qualquer outro await
+    // Write lock liberto — duração mínima ✓
+
+    // Se o frontend especificou IP de failover, registar após libertar o lock principal
+    let ip_srv_opt = req.ip_servidor.clone();
+    if let Some(ref ip_srv) = ip_srv_opt {
+        if !ip_srv.is_empty() && *ip_srv != server_ip {
+            s.failover_ips.write().await
+                .insert(req.cliente.clone(), ip_srv.clone());
+        }
+    }
 
     // Desbloqueio firewall em background — não atrasa resposta ao frontend
     let cfg = s.cfg.clone();
@@ -194,22 +190,26 @@ pub async fn encerrar(
     auth:       AuthUser,
     Json(req):  Json<EncerrarReq>,
 ) -> Json<Value> {
-    if !["cliente1", "cliente2"].contains(&req.cliente.as_str()) {
+    if !["eclusa_RG", "eclusa_PN"].contains(&req.cliente.as_str()) {
         return Json(serde_json::json!({"ok": false, "erro": "Cliente inválido"}));
     }
 
     // Capturar info da sessão RDP activa antes de limpar (read lock rápido)
     let (kill_info, operador) = {
         let st = s.inner.read().await;
-        let op = if req.cliente == "cliente1" {
-            st.sessoes.cliente1.operador.clone()
+        let op = if req.cliente == "eclusa_RG" {
+            st.sessoes.eclusa_RG.operador.clone()
         } else {
-            st.sessoes.cliente2.operador.clone()
+            st.sessoes.eclusa_PN.operador.clone()
         };
+        // Em failover usa o IP do reserva para o logoff
+        let server_ip = s.failover_ips.read().await
+            .get(&req.cliente).cloned()
+            .unwrap_or_else(|| s.rdp_client_ip(&req.cliente).unwrap_or("").to_string());
         let ki = st.rdp.get(&req.cliente)
             .filter(|r| r.ocupado && r.nome_sessao.starts_with("rdp-tcp#"))
             .and_then(|r| r.sessao_id)
-            .and_then(|sid| s.rdp_client_ip(&req.cliente).map(|ip| (ip.to_string(), sid)));
+            .map(|sid| (server_ip, sid));
         (ki, op)
     };
 
@@ -226,20 +226,23 @@ pub async fn encerrar(
     // Write lock — limpa sessão + supervisões
     {
         let mut st = s.inner.write().await;
-        if req.cliente == "cliente1" {
-            st.sessoes.cliente1     = Default::default();
-            st.supervisoes.cliente1.clear();
+        if req.cliente == "eclusa_RG" {
+            st.sessoes.eclusa_RG     = Default::default();
+            st.supervisoes.eclusa_RG.clear();
         } else {
-            st.sessoes.cliente2     = Default::default();
-            st.supervisoes.cliente2.clear();
+            st.sessoes.eclusa_PN     = Default::default();
+            st.supervisoes.eclusa_PN.clear();
         }
         broadcast_estado(&st, &s.sse_tx);
     }
 
-    // Desconectar sessão RDP em background
+    // Limpa failover ativo para este cliente (sessão encerrada = voltou ao normal)
+    s.failover_ips.write().await.remove(&req.cliente);
+
+    // Terminar sessão RDP em background — logoff destrói a sessão, tsdiscon só desconecta
     if let Some((ip, sid)) = kill_info {
         tokio::task::spawn_blocking(move || {
-            let _ = std::process::Command::new("tsdiscon")
+            let _ = std::process::Command::new("logoff")
                 .args([&sid.to_string(), &format!("/server:{}", ip)])
                 .output();
         });
@@ -253,16 +256,34 @@ pub async fn encerrar(
     Json(serde_json::json!({"ok": true}))
 }
 
+/// POST /sessoes/voltar-original — frontend confirma que reconectou ao servidor original.
+/// Limpa failover_ips para este cliente (o reserva fica livre).
+pub async fn voltar_original(
+    State(s):  State<Shared>,
+    _auth:     AuthUser,
+    Json(req): Json<EncerrarReq>, // reutiliza { cliente }
+) -> Json<serde_json::Value> {
+    if !["eclusa_RG", "eclusa_PN"].contains(&req.cliente.as_str()) {
+        return Json(serde_json::json!({"ok": false, "erro": "Cliente inválido"}));
+    }
+    s.failover_ips.write().await.remove(&req.cliente);
+    tracing::info!(cliente = %req.cliente, "failover_ips limpo — voltou ao servidor original");
+    Json(serde_json::json!({"ok": true}))
+}
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 fn rdp_shadow_info(
     rdp: &crate::types::RdpMap,
     cliente: &str,
     s: &Shared,
+    failover_ips: &std::collections::HashMap<String, String>,
 ) -> (u32, String) {
-    let default_ip = s.rdp_client_ip(cliente).unwrap_or("").to_string();
+    // Em failover usa o IP do reserva; caso contrário o IP original do cliente
+    let ip = failover_ips.get(cliente).cloned()
+        .unwrap_or_else(|| s.rdp_client_ip(cliente).unwrap_or("").to_string());
     rdp.get(cliente)
         .filter(|r| r.ocupado)
-        .and_then(|r| r.sessao_id.map(|sid| (sid, default_ip.clone())))
-        .unwrap_or((0, default_ip))
+        .and_then(|r| r.sessao_id.map(|sid| (sid, ip.clone())))
+        .unwrap_or((0, ip))
 }
