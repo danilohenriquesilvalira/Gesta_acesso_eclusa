@@ -166,12 +166,40 @@ pub async fn iniciar(
         }
     }
 
-    // Desbloqueio firewall em background — não atrasa resposta ao frontend
+    // Desbloqueio firewall + expulsar sessões órfãs em background
+    // Antes de o operador chegar via mstsc, limpa qualquer sessão que possa ter ficado
+    // aberta fora do sistema (RDP manual, sessão anterior não encerrada, etc.)
+    // Garante que nunca aparecem 2 sessões no ecrã de reconexão do Windows.
     let cfg = s.cfg.clone();
     let caller_ip_bg = caller_ip.clone();
     let server_ip_bg = server_ip.clone();
+    let rdp_info_bg  = s.inner.read().await.rdp.get(&req.cliente).cloned();
     tokio::task::spawn_blocking(move || {
         desbloquear_ip_firewall(&server_ip_bg, &caller_ip_bg, &cfg);
+        // tsdiscon em qualquer sessão RDP activa no servidor antes do operador chegar
+        if let Some(info) = rdp_info_bg {
+            if info.ocupado {
+                if let Some(sid) = info.sessao_id {
+                    #[cfg(not(windows))]
+                    let _ = std::process::Command::new("ssh")
+                        .args([
+                            "-i", &cfg.ssh_key_path,
+                            "-p", &cfg.ssh_port.to_string(),
+                            "-o", "StrictHostKeyChecking=no",
+                            "-o", "BatchMode=yes",
+                            "-o", "ConnectTimeout=5",
+                            &format!("{}@{}", cfg.rdp_user, server_ip_bg),
+                            &format!("tsdiscon {}", sid),
+                        ])
+                        .output();
+                    #[cfg(windows)]
+                    let _ = std::process::Command::new("tsdiscon")
+                        .args([&sid.to_string(), &format!("/server:{}", server_ip_bg)])
+                        .output();
+                    tracing::info!(servidor = %server_ip_bg, sessao_id = sid, "Sessão anterior desconectada antes de nova ligação");
+                }
+            }
+        }
     });
 
     // Audit log em background

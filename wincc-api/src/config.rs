@@ -13,7 +13,7 @@ pub const RDP_POLL_MS:            u64 = 500;
 #[allow(dead_code)]
 pub const STARTUP_GRACE_SECS:     u64 = 30;
 /// Expiração JWT em horas
-pub const JWT_EXPIRY_HOURS:       i64 = 8;
+pub const JWT_EXPIRY_HOURS:       i64 = 24;
 /// Conexões máximas ao PostgreSQL
 pub const DB_POOL_MAX:            u32 = 25;
 /// Timeout para adquirir conexão do pool (ms)
