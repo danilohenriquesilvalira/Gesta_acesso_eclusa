@@ -95,12 +95,19 @@ function LinhaServidor({
   rdpSempreHabilitado?: boolean;
   token:               string;
 }) {
-  const online = health?.windows_vivo;
-  const borda  = online ? "rgba(40,255,82,0.15)" : "rgba(227,44,44,0.12)";
+  const [hover, setHover] = useState(false);
+  const online  = health?.windows_vivo;
+  const acento  = online ? "rgba(40,255,82,0.6)" : "rgba(227,44,44,0.5)";
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 rounded-xl mb-2"
-      style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${borda}` }}>
+    <div className="flex items-center gap-4 px-4 py-3 rounded-xl mb-1.5 transition-colors"
+      style={{
+        background:  hover ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
+        border:      "1px solid rgba(255,255,255,0.07)",
+        borderLeft:  `3px solid ${acento}`,
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}>
 
       {/* IP — identificador primário */}
       <div className="shrink-0" style={{ width: 140 }}>
@@ -190,42 +197,45 @@ function AdminServidores({ servidorHealth, rdp, token }: Props) {
 
       {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
       <div className="mb-6">
-        <h1 className="text-white font-black text-xl mb-1">Visão Geral dos Servidores</h1>
-        <p className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.35)" }}>
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] mb-0.5"
+          style={{ color: "rgba(255,255,255,0.3)" }}>Infraestrutura</p>
+        <h1 className="text-[26px] font-black text-white leading-tight">Visão Geral dos Servidores</h1>
+        <p className="text-[12px] font-semibold mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
           Estado em tempo real — Windows Server + WinCC + Servidores Reserva
         </p>
       </div>
 
-      {/* ── Resumo ────────────────────────────────────────────────────────── */}
+      {/* ── Resumo KPI ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         {[
           { label: "Servidores WinCC Online", valor: `${vivosWincc} / ${SERVIDORES_WINCC.length}`,       cor: vivosWincc    === SERVIDORES_WINCC.length    ? "#28FF52" : "#F7D200" },
           { label: "WinCC Processos Vivos",   valor: `${winccVivos} / ${SERVIDORES_WINCC.length}`,       cor: winccVivos    === SERVIDORES_WINCC.length    ? "#28FF52" : "#F7D200" },
           { label: "Reservas Prontas",        valor: `${vivosReserva} / ${SERVIDORES_RESERVA.length}`,   cor: vivosReserva > 0 ? "#28FF52" : "#E32C2C" },
         ].map(({ label, valor, cor }) => (
-          <div key={label} className="px-4 py-3 rounded-xl" style={{ background: "#212E3E", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <p className="text-[10px] font-extrabold uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>{label}</p>
-            <p className="text-2xl font-black" style={{ color: cor }}>{valor}</p>
+          <div key={label} className="px-5 py-4 rounded-xl" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: "rgba(255,255,255,0.4)" }}>{label}</p>
+            <p className="text-[28px] font-black leading-none tabular-nums mt-0.5" style={{ color: cor }}>{valor}</p>
           </div>
         ))}
       </div>
 
       {/* ── Cabeçalho da tabela ───────────────────────────────────────────── */}
-      <div className="flex items-center gap-4 px-4 py-2 mb-1">
-        <div className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest" style={{ width: 140, color: "rgba(255,255,255,0.25)" }}>IP</div>
-        <div className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest" style={{ width: 160, color: "rgba(255,255,255,0.25)" }}>Servidor</div>
-        <div className="flex-1  text-[9px] font-extrabold uppercase tracking-widest"  style={{ color: "rgba(255,255,255,0.25)" }}>Windows</div>
-        <div className="flex-1  text-[9px] font-extrabold uppercase tracking-widest"  style={{ color: "rgba(255,255,255,0.25)" }}>WinCC</div>
-        <div className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest" style={{ width: 140, color: "rgba(255,255,255,0.25)" }}>Sessão Activa</div>
-        <div className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest text-right" style={{ width: 100, color: "rgba(255,255,255,0.25)" }}>Último Sinal</div>
-        <div className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest" style={{ width: 90, color: "rgba(255,255,255,0.25)" }}>Acesso</div>
+      <div className="flex items-center gap-4 px-4 py-2.5 mb-1 rounded-lg"
+        style={{ background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+        <div className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.16em]" style={{ width: 140, color: "rgba(255,255,255,0.5)" }}>IP</div>
+        <div className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.16em]" style={{ width: 160, color: "rgba(255,255,255,0.5)" }}>Servidor</div>
+        <div className="flex-1  text-[10px] font-extrabold uppercase tracking-[0.16em]"  style={{ color: "rgba(255,255,255,0.5)" }}>Windows</div>
+        <div className="flex-1  text-[10px] font-extrabold uppercase tracking-[0.16em]"  style={{ color: "rgba(255,255,255,0.5)" }}>WinCC</div>
+        <div className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.16em]" style={{ width: 140, color: "rgba(255,255,255,0.5)" }}>Sessão Activa</div>
+        <div className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.16em] text-right" style={{ width: 100, color: "rgba(255,255,255,0.5)" }}>Último Sinal</div>
+        <div className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.16em]" style={{ width: 90, color: "rgba(255,255,255,0.5)" }}>Acesso</div>
       </div>
 
       {/* ── Servidores WinCC (produção) ───────────────────────────────────── */}
-      <p className="text-[9px] font-extrabold uppercase tracking-[0.2em] mb-2 mt-4 px-1"
-        style={{ color: "rgba(255,255,255,0.25)" }}>
-        Servidores WinCC — Produção
-      </p>
+      <div className="flex items-center gap-3 mt-4 mb-2 px-1">
+        <span className="text-[10px] font-extrabold uppercase tracking-[0.22em]" style={{ color: "rgba(255,255,255,0.4)" }}>Servidores WinCC — Produção</span>
+        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+      </div>
       {SERVIDORES_WINCC.map(s => (
         <LinhaServidor key={s.id}
           ip={s.ip} nome={s.id} eclusa={s.eclusa}
@@ -238,10 +248,10 @@ function AdminServidores({ servidorHealth, rdp, token }: Props) {
       ))}
 
       {/* ── Servidores Reserva ────────────────────────────────────────────── */}
-      <p className="text-[9px] font-extrabold uppercase tracking-[0.2em] mb-2 mt-6 px-1"
-        style={{ color: "rgba(255,255,255,0.25)" }}>
-        Servidores Reserva
-      </p>
+      <div className="flex items-center gap-3 mt-6 mb-2 px-1">
+        <span className="text-[10px] font-extrabold uppercase tracking-[0.22em]" style={{ color: "rgba(255,255,255,0.4)" }}>Servidores Reserva</span>
+        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+      </div>
       {SERVIDORES_RESERVA.map(s => (
         <LinhaServidor key={s.id}
           ip={s.ip} nome={s.id}

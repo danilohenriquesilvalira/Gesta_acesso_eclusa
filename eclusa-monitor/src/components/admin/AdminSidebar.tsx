@@ -83,7 +83,7 @@ export default function AdminSidebar({ pagina, onPagina, utilizador, onSair }: P
       <nav className="flex-1 overflow-y-auto py-4 px-3">
         {NAV.map(({ secao, items }) => (
           <div key={secao} className="mb-6">
-            <p className="px-3 mb-2 text-[9px] font-extrabold uppercase tracking-[0.22em]"
+            <p className="px-3 mb-2 text-[10px] font-extrabold uppercase tracking-[0.22em]"
               style={{ color: "rgba(255,255,255,0.25)" }}>
               {secao}
             </p>
