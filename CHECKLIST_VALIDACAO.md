@@ -1,6 +1,6 @@
 # Checklist de Validação — Gestão de Acesso EDP Eclusas
 **Projecto:** Controlo de Acesso Remoto — Eclusas WinCC  
-**Última atualização:** 2026-05-26
+**Última atualização:** 2026-05-27
 
 ## Arquitectura
 ```
@@ -38,14 +38,15 @@
 | A10 | **Login com credenciais válidas desbloqueia IP automaticamente** em todos os servidores + DB |
 | A11 | Logs de auditoria: bloqueio, desbloqueio, expulsão registados em PostgreSQL com IP e timestamp |
 | A12 | Tempo de detecção e bloqueio: < 3 segundos após ligação não autorizada |
+| A13 | Dashboard blacklist reflecte desbloqueio em tempo real (poll 3s, sem cache stale) |
 
 ### O que falta fazer ❌
 
 | # | Tarefa | Prioridade |
 |---|--------|-----------|
-| A13 | Expiração automática de entradas na blacklist (ex: 24h) | Média |
-| A14 | Rate limiting no `/auth/login` — proteção brute-force | Alta |
-| A15 | Notificação SSE específica no dashboard quando IP é bloqueado | Baixa |
+| A14 | Expiração automática de entradas na blacklist (ex: 24h) | Média |
+| A15 | Rate limiting no `/auth/login` — proteção brute-force | Alta |
+| A16 | Notificação SSE específica no dashboard quando IP é bloqueado | Baixa |
 
 ---
 
@@ -75,11 +76,12 @@
 
 | # | Tarefa | Prioridade |
 |---|--------|-----------|
-| B16 | **Teste de retorno automático em produção** — aguarda `wincc-agent` como serviço Windows (sem troca manual de utilizador para subir o agente durante testes) | Alta |
-| B17 | Estado de failover persistido em PostgreSQL — backend reiniciado durante failover perde `failover_ips` | Alta |
-| B18 | Failover para CL, CM, VR (atualmente só RG e PN têm failover completo implementado) | Alta |
-| B19 | Failover em cadeia: Reserva01 cai durante uso → move automaticamente para Reserva02 | Média |
-| B20 | Dialog de confirmação opcional: "Servidor RG voltou — voltar ao principal?" | Baixa |
+| B16 | **Navegação automática WinCC Reserva no failover** — enviar string eclusa ao wincc-agent para abrir página correcta | Alta |
+| B17 | **Teste de retorno automático em produção** — aguarda `wincc-agent` como serviço Windows | Alta |
+| B18 | Estado de failover persistido em PostgreSQL — backend reiniciado durante failover perde `failover_ips` | Alta |
+| B19 | Failover para CL, CM, VR (atualmente só RG e PN têm failover completo implementado) | Alta |
+| B20 | Failover em cadeia: Reserva01 cai durante uso → move automaticamente para Reserva02 | Média |
+| B21 | Dialog de confirmação opcional: "Servidor RG voltou — voltar ao principal?" | Baixa |
 
 ---
 
@@ -104,17 +106,22 @@
 | C13 | Dashboard: monitorização estado PLC + eclusas WinCC |
 | C14 | Admin sidebar: utilizadores (CRUD), logs de auditoria, blacklist, servidores |
 | C15 | Página Servidores: visão geral `windows_vivo` + `wincc_vivo` + sessões ativas em tempo real |
+| C16 | Token JWT 24h (sem expiração durante turno) |
+| C17 | Sessão única RDP por servidor — sem dialog "Select a session to reconnect to" |
+| C18 | Logoff automático de sessões Disconnected após 1 minuto (MaxDisconnectionTime) |
+| C19 | Políticas RDP aplicadas automaticamente via SSH no arranque do backend (todos os servidores) |
+| C20 | Encerrar sessão via botão WinCC (`Encerrar_Sessao` bit → wincc-agent → backend → SSE → mstsc fecha silenciosamente) |
 
 ### O que falta fazer ❌
 
 | # | Tarefa | Prioridade |
 |---|--------|-----------|
-| C16 | `wincc-agent` instalado e a correr como serviço Windows (auto-start) em **todos** os 8 servidores | Alta |
-| C17 | WinCC Global Script (VBScript) configurado em CL, CM, VR | Alta |
-| C18 | Rate limiting / timeout de sessão (encerrar após X horas sem atividade) | Média |
-| C19 | Renovação silenciosa de tokens JWT no frontend | Média |
-| C20 | Relatório de acessos exportável CSV | Baixa |
-| C21 | Configuração de IPs via UI (sem editar config.json) | Baixa |
+| C21 | `wincc-agent` instalado e a correr como serviço Windows (auto-start) em **todos** os 8 servidores | Alta |
+| C22 | WinCC Global Script (VBScript) configurado em CL, CM, VR | Alta |
+| C23 | Rate limiting / timeout de sessão (encerrar após X horas sem atividade) | Média |
+| C24 | Renovação silenciosa de tokens JWT no frontend | Média |
+| C25 | Relatório de acessos exportável CSV | Baixa |
+| C26 | Configuração de IPs via UI (sem editar config.json) | Baixa |
 
 ---
 

@@ -11,7 +11,13 @@ use std::{
 const WINCC_PORT:         u16 = 8181;
 const WINCC_TIMEOUT_SECS: u64 = 10;
 
-fn load_config() -> (String, String) {
+struct Config {
+    api_url:      String,
+    servidor:     String,
+    agent_secret: String,
+}
+
+fn load_config() -> Config {
     let bytes = std::fs::read("C:\\wincc-agent\\config.json").unwrap_or_default();
     // Remove BOM UTF-8 (EF BB BF) que o PowerShell 5 adiciona automaticamente
     let content = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
@@ -20,9 +26,11 @@ fn load_config() -> (String, String) {
         String::from_utf8_lossy(&bytes).into_owned()
     };
     let v: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
-    let api = v["api_url"].as_str().unwrap_or("http://172.29.164.12:8080").to_string();
-    let srv = v["servidor"].as_str().unwrap_or("RG").to_string();
-    (api, srv)
+    Config {
+        api_url:      v["api_url"].as_str().unwrap_or("http://172.29.164.12:8080").to_string(),
+        servidor:     v["servidor"].as_str().unwrap_or("RG").to_string(),
+        agent_secret: v["agent_secret"].as_str().unwrap_or("wincc-agent-secret-edp").to_string(),
+    }
 }
 
 fn now_secs() -> u64 {
@@ -59,9 +67,13 @@ fn desenhar_dashboard(windows_vivo: bool, wincc_vivo: bool, elapsed: u64, backen
 fn main() {
     enable_ansi();
 
-    let (api_url, servidor) = load_config();
+    let cfg = load_config();
+    let api_url      = cfg.api_url.clone();
+    let servidor     = cfg.servidor.clone();
+    let agent_secret = cfg.agent_secret.clone();
+
     let last_alive  = Arc::new(AtomicU64::new(0));
-    let last_bit    = Arc::new(AtomicU64::new(0)); // bit devolvido ao WinCC (0 ou 1)
+    let last_bit    = Arc::new(AtomicU64::new(0));
     let stop        = Arc::new(AtomicBool::new(false));
 
     println!("╔══════════════════════════════════════════════════╗");
@@ -73,11 +85,13 @@ fn main() {
     println!("╚══════════════════════════════════════════════════╝");
     println!();
 
-    // Thread A: recebe /wincc-alive, inverte bit e devolve ao WinCC
+    // Thread A: servidor HTTP local — recebe pedidos do WinCC VBScript
     {
-        let stop    = stop.clone();
-        let la      = last_alive.clone();
-        let lb      = last_bit.clone();
+        let stop         = stop.clone();
+        let la           = last_alive.clone();
+        let lb           = last_bit.clone();
+        let api_url_t    = api_url.clone();
+        let secret_t     = agent_secret.clone();
         std::thread::spawn(move || {
             match TcpListener::bind(format!("127.0.0.1:{}", WINCC_PORT)) {
                 Ok(listener) => {
@@ -87,21 +101,39 @@ fn main() {
                         match listener.accept() {
                             Ok((mut stream, _)) => {
                                 stream.set_read_timeout(Some(Duration::from_millis(200))).ok();
-                                let mut buf = [0u8; 512];
+                                let mut buf = [0u8; 1024];
                                 let n = stream.read(&mut buf).unwrap_or(0);
                                 let req = std::str::from_utf8(&buf[..n]).unwrap_or("");
+
                                 if req.contains("POST") && req.contains("/wincc-alive") {
+                                    // Life bit — toggle para WinCC saber que agente está vivo
                                     la.store(now_secs(), Ordering::Relaxed);
-                                    // Inverte o bit para devolver ao WinCC
                                     let bit = if lb.load(Ordering::Relaxed) == 0 { 1u64 } else { 0u64 };
                                     lb.store(bit, Ordering::Relaxed);
-                                    // Resposta com o bit actual para o VBScript ler
                                     let body = format!("{{\"life_bit\":{}}}", bit);
                                     let resp = format!(
                                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
                                         body.len(), body
                                     );
                                     stream.write_all(resp.as_bytes()).ok();
+
+                                } else if req.contains("POST") && req.contains("/encerrar-sessao") {
+                                    // WinCC activou bit Encerrar_Sessao=1 — encaminhar para backend
+                                    let url    = format!("{}/sessoes/encerrar-agente", api_url_t);
+                                    let body   = format!("{{\"secret\":\"{}\"}}", secret_t);
+                                    let ok = ureq::post(&url)
+                                        .set("Content-Type", "application/json")
+                                        .timeout(Duration::from_secs(5))
+                                        .send_string(&body)
+                                        .map(|r| r.status() == 200)
+                                        .unwrap_or(false);
+                                    let resp_body = if ok { "{\"ok\":true}" } else { "{\"ok\":false}" };
+                                    let resp = format!(
+                                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                                        resp_body.len(), resp_body
+                                    );
+                                    stream.write_all(resp.as_bytes()).ok();
+
                                 } else {
                                     stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n").ok();
                                 }
@@ -137,7 +169,6 @@ fn main() {
         let la         = last_alive.clone();
         let mut primeira_vez = true;
 
-        // Reserva as 3 linhas do dashboard
         println!("  Windows  : [ VIVO  ]");
         println!("  WinCC    : [ ----- ]  (a iniciar...)");
         println!("  Backend  : [ ----- ]");

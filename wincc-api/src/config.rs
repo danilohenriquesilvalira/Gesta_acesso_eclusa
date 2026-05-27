@@ -39,6 +39,7 @@ pub struct Config {
     #[allow(dead_code)] pub ssh_key_path: String,
     #[allow(dead_code)] pub ssh_port:     u16,
     #[allow(dead_code)] pub reserva_ip:   String,
+    pub agent_secret: Option<String>,
 }
 
 pub fn load_config() -> Config {
@@ -57,6 +58,7 @@ pub fn load_config() -> Config {
                         .unwrap_or(22),
         reserva_ip:   std::env::var("RESERVA_IP")
                         .unwrap_or_else(|_| "172.29.164.15".into()),
+        agent_secret: std::env::var("AGENT_SECRET").ok(),
     }
 }
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { Estado, ServidorHealth } from "../types";
 
 export type FailoverPayload  = { cliente: string; ip_reserva: string; id_reserva?: string };
@@ -88,6 +89,11 @@ export function useEstado(
             reconectar_auto: json.reconectar_auto ?? false,
             operador:        json.operador,
           });
+          return;
+        }
+        // WinCC activou Encerrar_Sessao — fechar mstsc silenciosamente antes do logoff
+        if (json._event === "fechar_rdp") {
+          invoke("fechar_rdp_transicao").catch(() => invoke("fechar_rdp").catch(() => {}));
           return;
         }
         processarEstado(json as Estado);

@@ -166,40 +166,40 @@ pub async fn iniciar(
         }
     }
 
-    // Desbloqueio firewall + expulsar sessões órfãs em background
-    // Antes de o operador chegar via mstsc, limpa qualquer sessão que possa ter ficado
-    // aberta fora do sistema (RDP manual, sessão anterior não encerrada, etc.)
-    // Garante que nunca aparecem 2 sessões no ecrã de reconexão do Windows.
+    // Desbloqueio firewall + logoff de todas as sessões RDP anteriores em background.
+    // Usa PowerShell remoto via SSH para obter todos os IDs de sessão (incluindo
+    // Disconnected que o qwinsta normal ignora) e faz logoff de cada um.
+    // Garante que o operador nunca vê o dialog "Select a session to reconnect to".
     let cfg = s.cfg.clone();
     let caller_ip_bg = caller_ip.clone();
     let server_ip_bg = server_ip.clone();
-    let rdp_info_bg  = s.inner.read().await.rdp.get(&req.cliente).cloned();
     tokio::task::spawn_blocking(move || {
         desbloquear_ip_firewall(&server_ip_bg, &caller_ip_bg, &cfg);
-        // tsdiscon em qualquer sessão RDP activa no servidor antes do operador chegar
-        if let Some(info) = rdp_info_bg {
-            if info.ocupado {
-                if let Some(sid) = info.sessao_id {
-                    #[cfg(not(windows))]
-                    let _ = std::process::Command::new("ssh")
-                        .args([
-                            "-i", &cfg.ssh_key_path,
-                            "-p", &cfg.ssh_port.to_string(),
-                            "-o", "StrictHostKeyChecking=no",
-                            "-o", "BatchMode=yes",
-                            "-o", "ConnectTimeout=5",
-                            &format!("{}@{}", cfg.rdp_user, server_ip_bg),
-                            &format!("tsdiscon {}", sid),
-                        ])
-                        .output();
-                    #[cfg(windows)]
-                    let _ = std::process::Command::new("tsdiscon")
-                        .args([&sid.to_string(), &format!("/server:{}", server_ip_bg)])
-                        .output();
-                    tracing::info!(servidor = %server_ip_bg, sessao_id = sid, "Sessão anterior desconectada antes de nova ligação");
-                }
-            }
-        }
+        // Logoff de todas as sessões RDP (Active + Disconnected) via SSH
+        // O comando PowerShell lista IDs e faz logoff de cada um em sequência
+        #[cfg(not(windows))]
+        let _ = std::process::Command::new("ssh")
+            .args([
+                "-i", &cfg.ssh_key_path,
+                "-p", &cfg.ssh_port.to_string(),
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=5",
+                &format!("{}@{}", cfg.rdp_user, server_ip_bg),
+                "for /f \"skip=1 tokens=3\" %i in ('qwinsta') do @logoff %i 2>nul",
+            ])
+            .output();
+        #[cfg(windows)]
+        let _ = std::process::Command::new("wmic")
+            .args([
+                &format!("/node:{}", server_ip_bg),
+                &format!("/user:{}", cfg.rdp_user),
+                &format!("/password:{}", cfg.rdp_password),
+                "process", "call", "create",
+                "cmd /c for /f \"skip=1 tokens=3\" %i in ('qwinsta') do @logoff %i 2>nul",
+            ])
+            .output();
+        tracing::info!(servidor = %server_ip_bg, "Sessões RDP anteriores encerradas antes de nova ligação");
     });
 
     // Audit log em background
@@ -281,6 +281,103 @@ pub async fn encerrar(
     let msg = format!("Sessão encerrada: {} em {} (por: {})", operador, req.cliente, auth.username);
     tokio::spawn(async move { log_evento(&db, "sessao_encerrada", &msg).await; });
 
+    Json(serde_json::json!({"ok": true}))
+}
+
+/// POST /sessoes/encerrar-agente — chamado pelo wincc-agent quando WinCC activa bit Encerrar_Sessao.
+/// Autenticado por agent-secret fixo (sem JWT) — LAN only, sem exposição externa.
+/// Identifica o cliente pelo IP de origem do pedido (o servidor Windows que enviou).
+pub async fn encerrar_agente(
+    State(s):          State<Shared>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(req):         Json<serde_json::Value>,
+) -> Json<Value> {
+    // Verificar agent-secret
+    let secret = req.get("secret").and_then(|v| v.as_str()).unwrap_or("");
+    let expected = s.cfg.agent_secret.as_deref().unwrap_or("wincc-agent-secret-edp");
+    if secret != expected {
+        return Json(serde_json::json!({"ok": false, "erro": "Não autorizado"}));
+    }
+
+    // Identificar cliente pelo IP de origem
+    let caller_ip = addr.ip().to_string();
+    let cliente = s.rdp_clients.iter()
+        .find(|c| c.ip == caller_ip)
+        .map(|c| c.id.clone());
+
+    // Também verificar failover_ips — agente pode estar num reserva
+    let cliente = match cliente {
+        Some(c) => c,
+        None => {
+            let fips = s.failover_ips.read().await;
+            let found = fips.iter().find(|(_, ip)| *ip == &caller_ip).map(|(k, _)| k.clone());
+            match found {
+                Some(c) => c,
+                None => {
+                    tracing::warn!(ip = %caller_ip, "encerrar-agente: IP não reconhecido");
+                    return Json(serde_json::json!({"ok": false, "erro": "Servidor não reconhecido"}));
+                }
+            }
+        }
+    };
+
+    // Capturar info da sessão
+    let (kill_info, operador) = {
+        let st = s.inner.read().await;
+        let op = if cliente == "eclusa_RG" {
+            st.sessoes.eclusa_RG.operador.clone()
+        } else {
+            st.sessoes.eclusa_PN.operador.clone()
+        };
+        let server_ip = s.failover_ips.read().await
+            .get(&cliente).cloned()
+            .unwrap_or_else(|| s.rdp_client_ip(&cliente).unwrap_or("").to_string());
+        let ki = st.rdp.get(&cliente)
+            .filter(|r| r.ocupado && r.nome_sessao.starts_with("rdp-tcp#"))
+            .and_then(|r| r.sessao_id)
+            .map(|sid| (server_ip, sid));
+        (ki, op)
+    };
+
+    // 1. Emitir SSE "fechar_rdp" ANTES do logoff — Tauri fecha mstsc silenciosamente
+    //    evita que o Windows mostre o dialog "Sessão encerrada pelo administrador"
+    let sse_payload = serde_json::json!({
+        "_event": "fechar_rdp",
+        "cliente": cliente,
+    }).to_string();
+    let _ = s.sse_tx.send(sse_payload);
+
+    // 2. Aguardar 1.5s para o Tauri fechar o mstsc antes do logoff chegar
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    // 3. Limpar sessão + supervisões
+    {
+        let mut st = s.inner.write().await;
+        if cliente == "eclusa_RG" {
+            st.sessoes.eclusa_RG     = Default::default();
+            st.supervisoes.eclusa_RG.clear();
+        } else {
+            st.sessoes.eclusa_PN     = Default::default();
+            st.supervisoes.eclusa_PN.clear();
+        }
+        broadcast_estado(&st, &s.sse_tx);
+    }
+    s.failover_ips.write().await.remove(&cliente);
+
+    // 4. Logoff no servidor (mstsc já fechou — sem dialog para o operador)
+    if let Some((ip, sid)) = kill_info {
+        tokio::task::spawn_blocking(move || {
+            let _ = std::process::Command::new("logoff")
+                .args([&sid.to_string(), &format!("/server:{}", ip)])
+                .output();
+        });
+    }
+
+    let db  = s.db.clone();
+    let msg = format!("Sessão encerrada por WinCC (bit Encerrar_Sessao): {} em {}", operador, cliente);
+    tokio::spawn(async move { log_evento(&db, "sessao_encerrada_wincc", &msg).await; });
+
+    tracing::info!(cliente = %cliente, operador = %operador, "Sessão encerrada por WinCC");
     Json(serde_json::json!({"ok": true}))
 }
 

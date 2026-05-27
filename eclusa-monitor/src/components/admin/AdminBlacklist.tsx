@@ -11,16 +11,13 @@ interface EntradaBlacklist {
   created_at:  string;
 }
 
-// Cache module-level — sobrevive a navegação entre páginas
-let _cachedBlacklist: EntradaBlacklist[] = [];
-
 interface Props { apiUrl: string; token: string; }
 
 type FiltroId = "todos" | "ativas" | "inativas";
 const PER_PAGE = 12;
 
 export default function AdminBlacklist({ apiUrl, token }: Props) {
-  const [lista,       setLista]       = useState<EntradaBlacklist[]>(_cachedBlacklist);
+  const [lista,       setLista]       = useState<EntradaBlacklist[]>([]);
   const [ip,          setIp]          = useState("");
   const [reason,      setReason]      = useState("");
   const [erro,        setErro]        = useState("");
@@ -40,15 +37,14 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
     try {
       const r    = await fetch(`${apiUrl}/blacklist`, { headers: hdrs() });
       const data = await r.json();
-      _cachedBlacklist = Array.isArray(data) ? data : [];
-      setLista(_cachedBlacklist);
+      setLista(Array.isArray(data) ? data : []);
     } catch { /* sem ligação */ }
   };
 
   useEffect(() => {
     if (!token) return;
     carregar();
-    const iv = setInterval(carregar, 10_000);
+    const iv = setInterval(carregar, 3_000);
     return () => clearInterval(iv);
   }, [token]);
   useEffect(() => { setPage(1); }, [pesquisa, filtro]);

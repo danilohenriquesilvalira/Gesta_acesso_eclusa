@@ -49,6 +49,26 @@ pub fn configurar_shadow(server_ip: &str, cfg: &Config) {
     tracing::info!(server_ip = %server_ip, "Shadow mode RDP configurado (view-only, sem consentimento)");
 }
 
+/// Configura sessão única RDP no servidor Windows:
+/// - Máximo 1 ligação simultânea (MaxInstanceCount=1)
+/// - Logoff automático de sessões Disconnected após 1 minuto (MaxDisconnectionTime=60000ms)
+/// - Uma sessão por utilizador (fSingleSessionPerUser=1)
+/// Elimina o dialog "Select a session to reconnect to" com múltiplas sessões.
+pub fn configurar_sessao_unica(server_ip: &str, cfg: &Config) {
+    let base = "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services";
+    for (name, value) in [
+        ("MaxInstanceCount",      "1"),
+        ("MaxDisconnectionTime",  "60000"),
+        ("fSingleSessionPerUser", "1"),
+    ] {
+        run_remote_cmd(server_ip,
+            &format!("reg add \"{base}\" /v {name} /t REG_DWORD /d {value} /f"),
+            cfg,
+        );
+    }
+    tracing::info!(server_ip = %server_ip, "Sessão única RDP configurada (max 1, disc timeout 60s)");
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn rule_name_for(client_ip: &str) -> String {

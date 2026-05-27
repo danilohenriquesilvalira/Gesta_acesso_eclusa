@@ -113,6 +113,42 @@ Write-Host "Shadow RDP configurado"
 
 ---
 
+## PASSO 5-A — Sessão única RDP (obrigatório)
+
+Elimina o dialog "Select a session to reconnect to" e garante que só existe 1 sessão RDP por servidor.
+
+```powershell
+$path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+
+# Máximo 1 sessão RDP simultânea
+Set-ItemProperty -Path $path -Name "MaxInstanceCount" -Value 1 -Type DWord -Force
+
+# Logoff automático de sessões Disconnected após 1 minuto
+Set-ItemProperty -Path $path -Name "MaxDisconnectionTime" -Value 60000 -Type DWord -Force
+
+# Uma sessão por utilizador
+Set-ItemProperty -Path $path -Name "fSingleSessionPerUser" -Value 1 -Type DWord -Force
+
+Write-Host "Sessão única RDP configurada" -ForegroundColor Green
+```
+
+**Verificar se ficou correcto:**
+```powershell
+Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" | Select-Object MaxInstanceCount, MaxDisconnectionTime, fSingleSessionPerUser
+```
+
+Output esperado:
+```
+MaxInstanceCount MaxDisconnectionTime fSingleSessionPerUser
+---------------- -------------------- ---------------------
+               1                60000                     1
+```
+
+**Nota:** O backend aplica automaticamente estas políticas via SSH no arranque — mas numa nova VM é necessário aplicar manualmente uma vez antes de ligar ao sistema.
+
+---
+
 ## PASSO 6 — Verificar tudo
 
 ```powershell
@@ -190,10 +226,13 @@ $chave = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDz96FjJubzT1L7bb1PHgsHXDYLh1jftV3
 [System.IO.File]::WriteAllText("C:\ProgramData\ssh\administrators_authorized_keys", $chave + "`n", [System.Text.Encoding]::UTF8)
 icacls "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 
-# Shadow RDP
+# Shadow RDP + Sessão única
 $path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
 if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
-Set-ItemProperty -Path $path -Name "Shadow" -Value 2 -Type DWord -Force
+Set-ItemProperty -Path $path -Name "Shadow"              -Value 2     -Type DWord -Force
+Set-ItemProperty -Path $path -Name "MaxInstanceCount"    -Value 1     -Type DWord -Force
+Set-ItemProperty -Path $path -Name "MaxDisconnectionTime"-Value 60000 -Type DWord -Force
+Set-ItemProperty -Path $path -Name "fSingleSessionPerUser" -Value 1   -Type DWord -Force
 
 Write-Host "Configuracao concluida!" -ForegroundColor Green
 Write-Host "Testa no servidor Ubuntu: ssh -i /etc/wincc-api/ssh_key -o StrictHostKeyChecking=no Administrator@<IP_DESTA_VM> 'qwinsta'" -ForegroundColor Yellow

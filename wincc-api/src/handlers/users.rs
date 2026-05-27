@@ -88,24 +88,30 @@ pub async fn auth_login(
             .collect();
         let db_u = s.db.clone();
         let user_u = username.clone();
+        // Desbloquear firewall em background (blocking) — DB atualizado antes no async
+        let db_u2    = db_u.clone();
+        let caller_u2 = caller_ip_u.clone();
+        let user_u2   = user_u.clone();
+        tokio::spawn(async move {
+            let result = sqlx::query(
+                "UPDATE ip_blacklist SET active = FALSE, expires_at = NOW() \
+                 WHERE ip >>= $1::inet AND active = TRUE"
+            )
+            .bind(&caller_u2)
+            .execute(&db_u2)
+            .await;
+            match &result {
+                Ok(r)  => tracing::info!(ip = %caller_u2, rows = r.rows_affected(), "ip_blacklist desbloqueado após login"),
+                Err(e) => tracing::error!(ip = %caller_u2, erro = %e, "Falha ao desbloquear ip_blacklist"),
+            }
+            log_evento_com_ip(&db_u2, "ip_desbloqueado",
+                &format!("IP desbloqueado após login bem-sucedido: utilizador '{}'", user_u2),
+                &caller_u2).await;
+        });
         tokio::task::spawn_blocking(move || {
             for server_ip in &todos_ips {
                 desbloquear_ip_firewall(server_ip, &caller_ip_u, &cfg);
             }
-            // Remove da blacklist DB também
-            let rt = tokio::runtime::Handle::current();
-            rt.spawn(async move {
-                let _ = sqlx::query(
-                    "UPDATE ip_blacklist SET active = FALSE, expires_at = NOW() \
-                     WHERE ip = $1::inet AND active = TRUE"
-                )
-                .bind(&caller_ip_u)
-                .execute(&db_u)
-                .await;
-                log_evento_com_ip(&db_u, "ip_desbloqueado",
-                    &format!("IP desbloqueado após login bem-sucedido: utilizador '{}'", user_u),
-                    &caller_ip_u).await;
-            });
         });
     }
 

@@ -27,7 +27,7 @@ use db::{bootstrap_admin_if_needed, cleanup_loop, create_pool, load_operadores, 
 use handlers::{
     eclusas::{atualizar_eclusa, get_eclusas, ler_eclusas_do_disco},
     misc::{add_operador, admin_rdp_direto, del_operador, get_logs, get_operadores, health},
-    sessions::{encerrar, get_estado, get_sessoes, iniciar, sessoes_simples, shadow_simples, sse_eventos, voltar_original},
+    sessions::{encerrar, encerrar_agente, get_estado, get_sessoes, iniciar, sessoes_simples, shadow_simples, sse_eventos, voltar_original},
     stream::{get_mjpeg, post_frame, ws_viewer},
     supervisao::{encerrar_supervisao, iniciar_supervisao},
     users::{
@@ -296,14 +296,20 @@ async fn main() {
     // ── AppState — construído uma vez, partilhado por Arc ─────────────────────
     let state = AppState::new(db, cfg.clone(), operadores, eclusas_iniciais);
 
-    // ── Startup: limpa firewall + configura shadow RDP em cada servidor ─────
-    for client in &state.rdp_clients {
-        let ip  = client.ip.clone();
+    // ── Startup: limpa firewall + configura shadow + sessão única em todos os servidores ──
+    let todos_servidores: Vec<String> = state.rdp_clients.iter().map(|c| c.ip.clone())
+        .chain(state.servidores.iter().map(|s| s.ip.clone()))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    for ip in todos_servidores {
         let cfg = cfg.clone();
         tokio::task::spawn(async move {
             tokio::task::spawn_blocking(move || {
                 rdp::firewall::limpar_todos_bloqueios(&ip, &cfg);
                 rdp::firewall::configurar_shadow(&ip, &cfg);
+                rdp::firewall::configurar_sessao_unica(&ip, &cfg);
             }).await.ok();
         });
     }
@@ -349,6 +355,7 @@ async fn main() {
         .route("/sessoes/iniciar",           post(iniciar))
         .route("/sessoes/encerrar",          post(encerrar))
         .route("/sessoes/voltar-original",   post(voltar_original))
+        .route("/sessoes/encerrar-agente",   post(encerrar_agente))
         .route("/supervisao/iniciar",        post(iniciar_supervisao))
         .route("/supervisao/encerrar",       post(encerrar_supervisao))
         .route("/operadores",                get(get_operadores).post(add_operador))
