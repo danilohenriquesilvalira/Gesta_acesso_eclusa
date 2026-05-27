@@ -205,7 +205,7 @@ pub async fn rdp_poll_loop(state: Shared) {
                 // Agendar desconexão de acesso não autorizado
                 if !in_grace && nao_autorizado && !e_admin_autorizado {
                     if let Some(sid) = info.sessao_id {
-                        if info.nome_sessao.starts_with("rdp-tcp#") {
+                        if info.nome_sessao.starts_with("rdp-tcp") {
                             let chave = format!("{}:{}", ip, sid);
                             if !em_expulsao.contains(&chave) {
                                 em_expulsao.insert(chave);

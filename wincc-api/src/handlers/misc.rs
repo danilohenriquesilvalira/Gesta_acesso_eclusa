@@ -56,6 +56,7 @@ pub async fn wincc_status(
     });
     entry.wincc_vivo    = req.vivo;
     entry.ultimo_wincc  = now();
+    if let Some(t) = req.tela_atual { entry.tela_atual = t; }
     if entry.ip.is_empty() { entry.ip = ip; }
 
     broadcast_estado(&st, &s.sse_tx);

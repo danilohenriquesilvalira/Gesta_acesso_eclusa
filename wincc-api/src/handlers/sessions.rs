@@ -166,6 +166,22 @@ pub async fn iniciar(
         }
     }
 
+    // Desbloquear IP na DB — await directo para que o frontend já veja o estado correcto
+    {
+        let r = sqlx::query(
+            "UPDATE ip_blacklist SET active = FALSE, expires_at = NOW() \
+             WHERE ip >>= $1::inet AND active = TRUE"
+        )
+        .bind(&caller_ip)
+        .execute(&s.db)
+        .await;
+        if let Ok(res) = r {
+            if res.rows_affected() > 0 {
+                tracing::info!(ip = %caller_ip, "ip_blacklist desbloqueado ao iniciar sessão");
+            }
+        }
+    }
+
     // Desbloqueio firewall + logoff de todas as sessões RDP anteriores em background.
     // Usa PowerShell remoto via SSH para obter todos os IDs de sessão (incluindo
     // Disconnected que o qwinsta normal ignora) e faz logoff de cada um.

@@ -77,6 +77,7 @@ impl AppState {
                 ip:               s.ip,
                 windows_vivo:     false,
                 wincc_vivo:       false,
+                tela_atual:       String::new(),
                 ultimo_heartbeat: String::new(),
                 ultimo_wincc:     String::new(),
             }))

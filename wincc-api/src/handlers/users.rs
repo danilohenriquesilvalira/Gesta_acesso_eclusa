@@ -78,35 +78,34 @@ pub async fn auth_login(
         Err(e) => return Json(serde_json::json!({"ok": false, "erro": format!("Erro JWT: {}", e)})),
     };
 
-    // Desbloquear IP do caller em todos os servidores — login bem-sucedido anula bloqueios acidentais
-    // (crash do app Tauri, falha de rede, transição de failover mal orquestrada, etc.)
+    // Desbloquear IP na DB — await directo para que a resposta ao cliente já reflicta o estado correcto
+    {
+        let result = sqlx::query(
+            "UPDATE ip_blacklist SET active = FALSE, expires_at = NOW() \
+             WHERE ip >>= $1::inet AND active = TRUE"
+        )
+        .bind(&caller_ip)
+        .execute(&s.db)
+        .await;
+        match &result {
+            Ok(r)  => tracing::info!(ip = %caller_ip, rows = r.rows_affected(), "ip_blacklist desbloqueado após login"),
+            Err(e) => tracing::error!(ip = %caller_ip, erro = %e, "Falha ao desbloquear ip_blacklist"),
+        }
+    }
+
+    // Desbloquear firewall em todos os servidores em background (operação lenta — SSH)
     {
         let cfg         = s.cfg.clone();
         let caller_ip_u = caller_ip.clone();
         let todos_ips: Vec<String> = s.rdp_clients.iter().map(|c| c.ip.clone())
             .chain(s.servidores.iter().map(|sv| sv.ip.clone()))
             .collect();
-        let db_u = s.db.clone();
+        let db_u   = s.db.clone();
         let user_u = username.clone();
-        // Desbloquear firewall em background (blocking) — DB atualizado antes no async
-        let db_u2    = db_u.clone();
-        let caller_u2 = caller_ip_u.clone();
-        let user_u2   = user_u.clone();
         tokio::spawn(async move {
-            let result = sqlx::query(
-                "UPDATE ip_blacklist SET active = FALSE, expires_at = NOW() \
-                 WHERE ip >>= $1::inet AND active = TRUE"
-            )
-            .bind(&caller_u2)
-            .execute(&db_u2)
-            .await;
-            match &result {
-                Ok(r)  => tracing::info!(ip = %caller_u2, rows = r.rows_affected(), "ip_blacklist desbloqueado após login"),
-                Err(e) => tracing::error!(ip = %caller_u2, erro = %e, "Falha ao desbloquear ip_blacklist"),
-            }
-            log_evento_com_ip(&db_u2, "ip_desbloqueado",
-                &format!("IP desbloqueado após login bem-sucedido: utilizador '{}'", user_u2),
-                &caller_u2).await;
+            log_evento_com_ip(&db_u, "ip_desbloqueado",
+                &format!("IP desbloqueado após login bem-sucedido: utilizador '{}'", user_u),
+                &caller_ip_u).await;
         });
         tokio::task::spawn_blocking(move || {
             for server_ip in &todos_ips {

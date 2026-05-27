@@ -75,6 +75,8 @@ fn main() {
     let last_alive  = Arc::new(AtomicU64::new(0));
     let last_bit    = Arc::new(AtomicU64::new(0));
     let stop        = Arc::new(AtomicBool::new(false));
+    // Ultima tela_atual recebida do WinCC — vazio = WinCC ainda nao abriu a pagina
+    let tela_atual  = Arc::new(std::sync::Mutex::new(String::new()));
 
     println!("╔══════════════════════════════════════════════════╗");
     println!("║         WinCC Agent — Controlo de Acesso         ║");
@@ -90,6 +92,7 @@ fn main() {
         let stop         = stop.clone();
         let la           = last_alive.clone();
         let lb           = last_bit.clone();
+        let tela_t       = tela_atual.clone();
         let api_url_t    = api_url.clone();
         let secret_t     = agent_secret.clone();
         std::thread::spawn(move || {
@@ -106,10 +109,21 @@ fn main() {
                                 let req = std::str::from_utf8(&buf[..n]).unwrap_or("");
 
                                 if req.contains("POST") && req.contains("/wincc-alive") {
-                                    // Life bit — toggle para WinCC saber que agente está vivo
+                                    // Life bit + tela_atual — confirma WinCC vivo e pagina aberta
                                     la.store(now_secs(), Ordering::Relaxed);
                                     let bit = if lb.load(Ordering::Relaxed) == 0 { 1u64 } else { 0u64 };
                                     lb.store(bit, Ordering::Relaxed);
+
+                                    // Extrair tela_atual do body JSON
+                                    // body: {"life_bit":1,"tela_atual":"RG"}
+                                    if let Some(start) = req.find("\"tela_atual\":\"") {
+                                        let rest = &req[start + 14..];
+                                        if let Some(end) = rest.find('"') {
+                                            let tela = rest[..end].trim().to_string();
+                                            *tela_t.lock().unwrap() = tela;
+                                        }
+                                    }
+
                                     let body = format!("{{\"life_bit\":{}}}", bit);
                                     let resp = format!(
                                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
@@ -167,6 +181,7 @@ fn main() {
     {
         let url        = format!("{}/wincc-status/{}", api_url, servidor);
         let la         = last_alive.clone();
+        let tela_l     = tela_atual.clone();
         let mut primeira_vez = true;
 
         println!("  Windows  : [ VIVO  ]");
@@ -178,8 +193,10 @@ fn main() {
             std::thread::sleep(Duration::from_secs(3));
 
             let elapsed    = now_secs().saturating_sub(la.load(Ordering::Relaxed));
-            let wincc_vivo = elapsed < WINCC_TIMEOUT_SECS;
-            let body       = format!("{{\"vivo\":{}}}", wincc_vivo);
+            let tela       = tela_l.lock().unwrap().clone();
+            // wincc_vivo = heartbeat recente E pagina principal aberta
+            let wincc_vivo = elapsed < WINCC_TIMEOUT_SECS && !tela.is_empty();
+            let body       = format!("{{\"vivo\":{},\"tela_atual\":\"{}\"}}", wincc_vivo, tela);
 
             let backend_ok = ureq::post(&url)
                 .set("Content-Type", "application/json")
