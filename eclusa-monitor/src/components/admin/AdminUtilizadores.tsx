@@ -13,14 +13,14 @@ interface Utilizador {
 }
 
 const ROLE_META: Record<string, { label: string; cor: string; bg: string }> = {
-  admin:      { label: "Admin",      cor: "#212E3E", bg: "#D7DFE0" },
-  operator:   { label: "Operador",   cor: "#225E66", bg: "rgba(34,94,102,0.1)" },
-  supervisor: { label: "Supervisor", cor: "#263CC8", bg: "rgba(38,60,200,0.1)" },
+  admin:      { label: "Admin",      cor: "rgba(255,255,255,0.8)", bg: "rgba(255,255,255,0.1)" },
+  operator:   { label: "Operador",   cor: "#64E4EE",               bg: "rgba(34,94,102,0.2)"  },
+  supervisor: { label: "Supervisor", cor: "#7D8ADE",               bg: "rgba(38,60,200,0.18)" },
 };
 const STATUS_META: Record<string, { label: string; cor: string }> = {
-  active:   { label: "Ativo",     cor: "#225E66" },
+  active:   { label: "Ativo",     cor: "#28FF52" },
   blocked:  { label: "Bloqueado", cor: "#E32C2C" },
-  inactive: { label: "Inativo",   cor: "#7C9599" },
+  inactive: { label: "Inativo",   cor: "rgba(255,255,255,0.3)" },
 };
 const CLIENTE_LABEL: Record<string, string> = {
   eclusa_RG: "Régua",
@@ -56,10 +56,10 @@ function ConfirmDialog({ titulo, mensagem, subtexto, variante, labelOk, onOk, on
       style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
       onClick={e => { if (e.target === e.currentTarget) onCancelar(); }}>
       <div className="w-[420px] rounded-2xl overflow-hidden"
-        style={{ background: "#FFFFFF", boxShadow: "0 24px 60px rgba(0,0,0,0.3)" }}>
-        <div className="px-6 py-5 flex items-center justify-between" style={{ background: "#212E3E" }}>
+        style={{ background: "#212E3E", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
+        <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div>
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.22em]" style={{ color: "rgba(255,255,255,0.4)" }}>Confirmação</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.22em]" style={{ color: "rgba(255,255,255,0.4)" }}>Confirmação</p>
             <p className="text-[18px] font-black text-white leading-tight mt-0.5">{titulo}</p>
           </div>
           <button onClick={onCancelar}
@@ -73,20 +73,20 @@ function ConfirmDialog({ titulo, mensagem, subtexto, variante, labelOk, onOk, on
         <div className="p-6">
           <div className="flex items-start gap-4 mb-5">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: variante === "danger" ? "rgba(227,44,44,0.07)" : "rgba(38,60,200,0.07)" }}>
+              style={{ background: variante === "danger" ? "rgba(227,44,44,0.12)" : "rgba(38,60,200,0.12)" }}>
               {iconeVariante}
             </div>
             <div>
-              <p className="text-[14px] font-bold" style={{ color: "#212E3E" }}>{mensagem}</p>
-              {subtexto && <p className="text-[12px] mt-1.5" style={{ color: "#7C9599" }}>{subtexto}</p>}
+              <p className="text-[14px] font-bold" style={{ color: "rgba(255,255,255,0.85)" }}>{mensagem}</p>
+              {subtexto && <p className="text-[12px] mt-1.5" style={{ color: "rgba(255,255,255,0.4)" }}>{subtexto}</p>}
             </div>
           </div>
           <div className="flex gap-3">
             <button onClick={onCancelar}
               className="flex-1 py-3 rounded-xl font-extrabold text-[13px] cursor-pointer"
-              style={{ background: "#E6EBEC", border: "1px solid #D7DFE0", color: "#64748B" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#D7DFE0"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#E6EBEC"; }}>
+              style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }}>
               Cancelar
             </button>
             <button onClick={() => { onOk(); onCancelar(); }}
@@ -268,24 +268,24 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
       render: u => (
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-[14px] shrink-0"
-            style={{ background: "rgba(33,46,62,0.1)", color: "#212E3E" }}>
+            style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}>
             {u.username.charAt(0).toUpperCase()}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-[13px] font-bold leading-tight" style={{ color: "#212E3E" }}>
+              <p className="text-[13px] font-bold leading-tight" style={{ color: "rgba(255,255,255,0.85)" }}>
                 {u.username}
               </p>
               {u.sessao_ativa && (
                 <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold"
-                  style={{ background: "rgba(40,255,82,0.12)", color: "#1a8a35", border: "1px solid rgba(40,255,82,0.3)" }}>
+                  style={{ background: "rgba(40,255,82,0.15)", color: "#28FF52", border: "1px solid rgba(40,255,82,0.3)" }}>
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#28FF52" }} />
                   {u.cliente_ativo ? CLIENTE_LABEL[u.cliente_ativo] ?? u.cliente_ativo : "em sessão"}
                 </span>
               )}
             </div>
             {u.display_name && u.display_name !== u.username && (
-              <p className="text-[11px] mt-0.5" style={{ color: "#7C9599" }}>{u.display_name}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{u.display_name}</p>
             )}
           </div>
         </div>
@@ -323,7 +323,7 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
       width:  "minmax(0,1.5fr)",
       center: true,
       render: u => (
-        <span className="font-mono text-[12px]" style={{ color: "#212E3E" }}>{fmt(u.last_login)}</span>
+        <span className="font-mono text-[12px]" style={{ color: "rgba(255,255,255,0.5)" }}>{fmt(u.last_login)}</span>
       ),
     },
     {
@@ -331,7 +331,7 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
       width:  "minmax(0,1.5fr)",
       center: true,
       render: u => (
-        <span className="font-mono text-[12px]" style={{ color: "#212E3E" }}>{fmt(u.created_at)}</span>
+        <span className="font-mono text-[12px]" style={{ color: "rgba(255,255,255,0.5)" }}>{fmt(u.created_at)}</span>
       ),
     },
     {
@@ -370,7 +370,7 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
     },
   ];
 
-  const inputStyle = { background: "#F1F4F4", border: "1px solid #D7DFE0", color: "#212E3E" };
+  const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#FFFFFF" };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -378,7 +378,7 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
       {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
       <div className="shrink-0 px-8 pt-6 pb-5 flex items-start justify-between">
         <div>
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.25em]"
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.22em]"
             style={{ color: "rgba(255,255,255,0.3)" }}>Administração do Sistema</p>
           <h1 className="text-[26px] font-black text-white mt-0.5 leading-tight">Utilizadores Registados</h1>
         </div>
@@ -407,24 +407,24 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
       {/* ── Estatísticas ──────────────────────────────────────────────────── */}
       <div className="shrink-0 px-8 pb-5 grid grid-cols-4 gap-3">
         {[
-          { label: "Total",      v: lista.length,                                     cor: "#212E3E",
+          { label: "Total",      v: lista.length,                                     cor: "rgba(255,255,255,0.8)",
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
-          { label: "Ativos",     v: lista.filter(u => u.status === "active").length,  cor: "#225E66",
+          { label: "Ativos",     v: lista.filter(u => u.status === "active").length,  cor: "#28FF52",
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> },
           { label: "Bloqueados", v: lista.filter(u => u.status === "blocked").length, cor: "#E32C2C",
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> },
-          { label: "Admins",     v: lista.filter(u => u.role === "admin").length,     cor: "#263CC8",
+          { label: "Admins",     v: lista.filter(u => u.role === "admin").length,     cor: "#7D8ADE",
             icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> },
         ].map(({ label, v, cor, icon }) => (
           <div key={label} className="rounded-2xl px-5 py-4 flex items-center gap-4"
-            style={{ background: "#FFFFFF", boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}>
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: v > 0 ? `${cor}18` : "#F1F4F4", color: v > 0 ? cor : "#BECACC" }}>
+              style={{ background: v > 0 ? `${cor}22` : "rgba(255,255,255,0.04)", color: v > 0 ? cor : "rgba(255,255,255,0.2)" }}>
               {icon}
             </div>
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: "#7C9599" }}>{label}</p>
-              <p className="text-[26px] font-black leading-none tabular-nums" style={{ color: v > 0 ? cor : "#BECACC" }}>{v}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: "rgba(255,255,255,0.4)" }}>{label}</p>
+              <p className="text-[28px] font-black leading-none tabular-nums mt-0.5" style={{ color: v > 0 ? cor : "rgba(255,255,255,0.2)" }}>{v}</p>
             </div>
           </div>
         ))}
@@ -451,25 +451,25 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
         toolbar={
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
-              style={{ background: "#F1F4F4", border: "1px solid #E6EBEC" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C9599" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
               <input value={pesquisa} onChange={e => setPesquisa(e.target.value)}
                 placeholder="Pesquisar utilizador..."
-                className="bg-transparent text-[12px] font-semibold focus:outline-none w-44"
-                style={{ color: "#212E3E" }}
+                className="bg-transparent text-[12px] font-semibold focus:outline-none w-44 placeholder:text-white/20"
+                style={{ color: "rgba(255,255,255,0.8)" }}
               />
               {pesquisa && (
                 <button onClick={() => setPesquisa("")}
-                  className="flex items-center justify-center cursor-pointer" style={{ color: "#7C9599" }}>
+                  className="flex items-center justify-center cursor-pointer" style={{ color: "rgba(255,255,255,0.4)" }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </button>
               )}
             </div>
-            <span className="text-[12px] font-semibold" style={{ color: "#7C9599" }}>
+            <span className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>
               {filtrados.length} {filtrados.length === 1 ? "resultado" : "resultados"}
             </span>
           </div>
@@ -482,9 +482,9 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
           style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
           onClick={e => { if (e.target === e.currentTarget) fecharDialog(); }}>
           <div className="w-[440px] rounded-2xl overflow-hidden"
-            style={{ background: "#FFFFFF", boxShadow: "0 24px 60px rgba(0,0,0,0.3)" }}>
+            style={{ background: "#212E3E", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
 
-            <div className="px-7 py-5 flex items-center justify-between" style={{ background: "#212E3E" }}>
+            <div className="px-7 py-5 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.2em]" style={{ color: "rgba(255,255,255,0.45)" }}>Novo Acesso</p>
                 <p className="text-[20px] font-black text-white leading-tight mt-0.5">Criar Utilizador</p>
@@ -507,24 +507,24 @@ export default function AdminUtilizadores({ apiUrl, token }: Props) {
                 { label: "Confirmar Senha", value: confirmar, set: setConfirmar, type: "password", ph: "Repetir senha" },
               ].map(({ label, value, set, type, ph }) => (
                 <div key={label}>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-[0.18em] mb-2" style={{ color: "#7C9599" }}>{label}</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>{label}</label>
                   <input type={type} value={value} onChange={e => set(e.target.value)}
                     placeholder={ph} autoFocus={label === "Utilizador"}
-                    className="w-full rounded-xl px-4 py-3 text-[14px] font-semibold focus:outline-none"
+                    className="w-full rounded-xl px-4 py-3 text-[14px] font-semibold focus:outline-none placeholder:text-white/20"
                     style={inputStyle}
-                    onFocus={e => { e.currentTarget.style.borderColor = "#225E66"; e.currentTarget.style.background = "#EFF7F7"; }}
-                    onBlur={e => { e.currentTarget.style.borderColor = "#D7DFE0"; e.currentTarget.style.background = "#F1F4F4"; }}
+                    onFocus={e => { e.currentTarget.style.borderColor = "rgba(34,94,102,0.6)"; e.currentTarget.style.background = "rgba(34,94,102,0.12)"; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
                   />
                 </div>
               ))}
 
               <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-[0.18em] mb-2" style={{ color: "#7C9599" }}>Perfil</label>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Perfil</label>
                 <select value={role} onChange={e => setRole(e.target.value)}
                   className="w-full rounded-xl px-4 py-3 text-[14px] font-semibold focus:outline-none cursor-pointer"
                   style={inputStyle}
-                  onFocus={e => { e.currentTarget.style.borderColor = "#225E66"; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = "#D7DFE0"; }}>
+                  onFocus={e => { e.currentTarget.style.borderColor = "rgba(34,94,102,0.6)"; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}>
                   <option value="operator">Operador</option>
                   <option value="supervisor">Supervisor</option>
                   <option value="admin">Administrador</option>

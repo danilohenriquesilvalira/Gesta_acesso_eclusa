@@ -151,12 +151,26 @@ pub async fn rdp_poll_loop(state: Shared) {
                     if sessao_velha {
                         match cliente.as_str() {
                             "eclusa_RG" => {
-                                tracing::info!(cliente = %cliente, operador = %st.sessoes.eclusa_RG.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
+                                let op = st.sessoes.eclusa_RG.operador.clone();
+                                tracing::info!(cliente = %cliente, operador = %op, "Sessão auto-encerrada — RDP livre há mais de 30s");
                                 st.sessoes.eclusa_RG = Default::default();
+                                let db  = state.db.clone();
+                                let cli = cliente.clone();
+                                tokio::spawn(async move {
+                                    log_evento(&db, "sessao_auto_encerrada",
+                                        &format!("Sessão auto-encerrada: operador '{}' em {} — RDP desligado há mais de 30s", op, cli)).await;
+                                });
                             }
                             "eclusa_PN" => {
-                                tracing::info!(cliente = %cliente, operador = %st.sessoes.eclusa_PN.operador, "Sessão auto-encerrada — RDP livre há mais de 30s");
+                                let op = st.sessoes.eclusa_PN.operador.clone();
+                                tracing::info!(cliente = %cliente, operador = %op, "Sessão auto-encerrada — RDP livre há mais de 30s");
                                 st.sessoes.eclusa_PN = Default::default();
+                                let db  = state.db.clone();
+                                let cli = cliente.clone();
+                                tokio::spawn(async move {
+                                    log_evento(&db, "sessao_auto_encerrada",
+                                        &format!("Sessão auto-encerrada: operador '{}' em {} — RDP desligado há mais de 30s", op, cli)).await;
+                                });
                             }
                             _ => {}
                         }

@@ -1,5 +1,6 @@
-use axum::{extract::{Path, State}, http::StatusCode, Json};
+use axum::{extract::{Path, Query, State}, http::StatusCode, Json};
 use chrono::Utc;
+use serde::Deserialize;
 use serde_json::Value;
 use std::time::Instant;
 
@@ -156,15 +157,69 @@ pub async fn del_operador(
 
 // ── Logs de auditoria ─────────────────────────────────────────────────────────
 
-/// GET /logs — últimos 500 eventos (requer auth)
-pub async fn get_logs(State(s): State<Shared>, _auth: AuthUser) -> Json<Value> {
+#[derive(Debug, Deserialize)]
+pub struct LogsQuery {
+    /// Filtro por tipo exacto de evento (ex: "login_ok", "sessao_iniciada")
+    pub tipo:        Option<String>,
+    /// Filtro por texto no username/IP (pesquisa na coluna description)
+    pub utilizador:  Option<String>,
+    /// Data início (ISO 8601: "2025-01-01T00:00:00Z")
+    pub desde:       Option<chrono::DateTime<Utc>>,
+    /// Data fim
+    pub ate:         Option<chrono::DateTime<Utc>>,
+    /// Página (base 0)
+    #[serde(default)]
+    pub pagina:      i64,
+    /// Registos por página (máx 200, defeito 100)
+    pub por_pagina:  Option<i64>,
+}
+
+/// GET /logs — auditoria paginada com filtros (requer auth)
+pub async fn get_logs(
+    State(s):   State<Shared>,
+    _auth:      AuthUser,
+    Query(q):   Query<LogsQuery>,
+) -> Json<Value> {
+    let por_pagina = q.por_pagina.unwrap_or(100).min(500).max(1);
+    let offset     = (q.pagina.max(0)) * por_pagina;
+
+    // Construção dinâmica da query com filtros opcionais
+    // Usamos ILIKE para pesquisa case-insensitive na description
     let rows = sqlx::query(
         "SELECT id, event_type, description, ip_address::text, created_at \
-         FROM audit_events ORDER BY created_at DESC LIMIT 500"
+         FROM audit_events \
+         WHERE ($1::text IS NULL OR event_type = $1) \
+           AND ($2::text IS NULL OR description ILIKE '%' || $2 || '%') \
+           AND ($3::timestamptz IS NULL OR created_at >= $3) \
+           AND ($4::timestamptz IS NULL OR created_at <= $4) \
+         ORDER BY created_at DESC \
+         LIMIT $5 OFFSET $6"
     )
+    .bind(q.tipo.as_deref())
+    .bind(q.utilizador.as_deref())
+    .bind(q.desde)
+    .bind(q.ate)
+    .bind(por_pagina)
+    .bind(offset)
     .fetch_all(&s.db)
     .await
     .unwrap_or_default();
+
+    // Total de registos com os mesmos filtros (para o frontend calcular nº de páginas)
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_events \
+         WHERE ($1::text IS NULL OR event_type = $1) \
+           AND ($2::text IS NULL OR description ILIKE '%' || $2 || '%') \
+           AND ($3::timestamptz IS NULL OR created_at >= $3) \
+           AND ($4::timestamptz IS NULL OR created_at <= $4)"
+    )
+    .bind(q.tipo.as_deref())
+    .bind(q.utilizador.as_deref())
+    .bind(q.desde)
+    .bind(q.ate)
+    .fetch_one(&s.db)
+    .await
+    .unwrap_or(0);
 
     let logs: Vec<Value> = rows.iter().map(|r| serde_json::json!({
         "id":        sqlx::Row::try_get::<i64,_>(r, "id").unwrap_or(0),
@@ -175,7 +230,13 @@ pub async fn get_logs(State(s): State<Shared>, _auth: AuthUser) -> Json<Value> {
                          .ok().map(|t| t.to_rfc3339()).unwrap_or_default(),
     })).collect();
 
-    Json(serde_json::json!(logs))
+    Json(serde_json::json!({
+        "logs":       logs,
+        "total":      total,
+        "pagina":     q.pagina.max(0),
+        "por_pagina": por_pagina,
+        "paginas":    (total as f64 / por_pagina as f64).ceil() as i64,
+    }))
 }
 
 // ── RDP Admin direto ──────────────────────────────────────────────────────────

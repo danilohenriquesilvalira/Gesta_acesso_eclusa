@@ -96,11 +96,11 @@ export default function EclusaAcessoCard({
           <p className={`text-[32px] font-black leading-none mt-1 ${isWhite ? "text-[#212E3E]" : "text-white"}`}>{nomeEclusa}</p>
           {emReserva && (
             <div className="flex items-center gap-1.5 mt-1.5">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F7D200" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                 <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              <span className="text-[10px] font-bold" style={{ color: "#F59E0B" }}>Via {emReserva}</span>
+              <span className="text-[10px] font-bold" style={{ color: "#F7D200" }}>Via {emReserva}</span>
             </div>
           )}
         </div>
@@ -144,9 +144,12 @@ export default function EclusaAcessoCard({
         )}
 
         {naoAutor && (
-          <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-red-50 border border-red-100" : "bg-amber-500/10 border border-amber-500/25"}`}>
-            <p className={`text-[10px] font-bold uppercase tracking-wide ${isWhite ? "text-red-700" : "text-amber-600"}`}>Acesso Não Autorizado</p>
-            {rdp.utilizador && <p className={`text-[12px] font-bold mt-0.5 ${isWhite ? "text-red-900" : "text-amber-400/70"}`}>{rdp.utilizador}</p>}
+          <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-red-50 border border-red-100" : ""}`}
+            style={!isWhite ? { background: "rgba(247,210,0,0.1)", border: "1px solid rgba(247,210,0,0.25)" } : {}}>
+            <p className={`text-[10px] font-bold uppercase tracking-wide ${isWhite ? "text-red-700" : ""}`}
+              style={!isWhite ? { color: "#F7D200" } : {}}>Acesso Não Autorizado</p>
+            {rdp.utilizador && <p className={`text-[12px] font-bold mt-0.5 ${isWhite ? "text-red-900" : ""}`}
+              style={!isWhite ? { color: "rgba(247,210,0,0.7)" } : {}}>{rdp.utilizador}</p>}
           </div>
         )}
       </div>
@@ -168,12 +171,13 @@ export default function EclusaAcessoCard({
               onClick={onConectar}
               disabled={conectando}
               className="w-full py-2.5 rounded-xl font-bold text-[13px] text-white transition-all cursor-pointer disabled:opacity-40 shadow-sm"
-              style={{ background: conectando ? "rgba(27,47,72,0.1)" : isWhite ? "#212E3E" : "#00A651" }}
+              style={{ background: conectando ? "rgba(27,47,72,0.1)" : isWhite ? "#212E3E" : "#28FF52", color: conectando ? undefined : isWhite ? "#FFFFFF" : "#212E3E" }}
             >
               {conectando ? "A ligar..." : "Aceder via RDP"}
             </button>
         ) : naoAutor ? (
-          <div className="py-2.5 rounded-xl text-center text-[12px] font-bold text-amber-400/60 bg-amber-400/[0.08]">
+          <div className="py-2.5 rounded-xl text-center text-[12px] font-bold"
+            style={{ color: "rgba(247,210,0,0.6)", background: "rgba(247,210,0,0.08)" }}>
             Aguardar saída do utilizador
           </div>
         ) : ocupado ? (

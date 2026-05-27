@@ -65,7 +65,7 @@ export default function AdminSidebar({ pagina, onPagina, utilizador, onSair }: P
       className="shrink-0 flex flex-col h-screen select-none"
       style={{
         width: 240,
-        background: "#1A2535",
+        background: "#212E3E",
         borderRight: "1px solid rgba(255,255,255,0.06)",
       }}
     >

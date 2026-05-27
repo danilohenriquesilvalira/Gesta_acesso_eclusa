@@ -64,9 +64,9 @@ function BotaoRdpAdmin({ ip, token, disabled = false }: { ip: string; token: str
       title={disabled ? "Servidor offline" : `Abrir RDP para ${ip}`}
       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"
       style={{
-        background: disabled ? "rgba(255,255,255,0.04)" : loading ? "rgba(96,165,250,0.15)" : "rgba(96,165,250,0.12)",
-        border:     disabled ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(96,165,250,0.3)",
-        color:      disabled ? "rgba(255,255,255,0.2)" : "#60A5FA",
+        background: disabled ? "rgba(255,255,255,0.04)" : loading ? "rgba(12,211,248,0.15)" : "rgba(12,211,248,0.12)",
+        border:     disabled ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(12,211,248,0.3)",
+        color:      disabled ? "rgba(255,255,255,0.2)" : "#0CD3F8",
         cursor:     disabled ? "not-allowed" : "pointer",
       }}
     >
@@ -100,7 +100,7 @@ function LinhaServidor({
 
   return (
     <div className="flex items-center gap-4 px-4 py-3 rounded-xl mb-2"
-      style={{ background: "#1A2535", border: `1px solid ${borda}` }}>
+      style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${borda}` }}>
 
       {/* IP — identificador primário */}
       <div className="shrink-0" style={{ width: 140 }}>
@@ -134,8 +134,8 @@ function LinhaServidor({
       <div className="shrink-0" style={{ width: 140 }}>
         {sessaoAtiva ? (
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "#F59E0B" }} />
-            <span className="text-[10px] font-bold truncate" style={{ color: "#F59E0B" }}>
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "#F7D200" }} />
+            <span className="text-[10px] font-bold truncate" style={{ color: "#F7D200" }}>
               {sessaoAtiva.utilizador || "Em uso"}
             </span>
           </div>
@@ -199,11 +199,11 @@ function AdminServidores({ servidorHealth, rdp, token }: Props) {
       {/* ── Resumo ────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         {[
-          { label: "Servidores WinCC Online", valor: `${vivosWincc} / ${SERVIDORES_WINCC.length}`,       cor: vivosWincc    === SERVIDORES_WINCC.length    ? "#28FF52" : "#F59E0B" },
-          { label: "WinCC Processos Vivos",   valor: `${winccVivos} / ${SERVIDORES_WINCC.length}`,       cor: winccVivos    === SERVIDORES_WINCC.length    ? "#28FF52" : "#F59E0B" },
+          { label: "Servidores WinCC Online", valor: `${vivosWincc} / ${SERVIDORES_WINCC.length}`,       cor: vivosWincc    === SERVIDORES_WINCC.length    ? "#28FF52" : "#F7D200" },
+          { label: "WinCC Processos Vivos",   valor: `${winccVivos} / ${SERVIDORES_WINCC.length}`,       cor: winccVivos    === SERVIDORES_WINCC.length    ? "#28FF52" : "#F7D200" },
           { label: "Reservas Prontas",        valor: `${vivosReserva} / ${SERVIDORES_RESERVA.length}`,   cor: vivosReserva > 0 ? "#28FF52" : "#E32C2C" },
         ].map(({ label, valor, cor }) => (
-          <div key={label} className="px-4 py-3 rounded-xl" style={{ background: "#1A2535" }}>
+          <div key={label} className="px-4 py-3 rounded-xl" style={{ background: "#212E3E", border: "1px solid rgba(255,255,255,0.08)" }}>
             <p className="text-[10px] font-extrabold uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>{label}</p>
             <p className="text-2xl font-black" style={{ color: cor }}>{valor}</p>
           </div>

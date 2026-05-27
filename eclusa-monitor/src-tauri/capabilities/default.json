@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Permissões padrão da aplicação eclusa-monitor",
-  "windows": ["main"],
+  "windows": ["main", "mapa"],
   "permissions": [
     "core:default"
   ]

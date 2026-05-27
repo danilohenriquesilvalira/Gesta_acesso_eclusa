@@ -100,12 +100,13 @@ pub async fn auth_login(
         let todos_ips: Vec<String> = s.rdp_clients.iter().map(|c| c.ip.clone())
             .chain(s.servidores.iter().map(|sv| sv.ip.clone()))
             .collect();
-        let db_u   = s.db.clone();
-        let user_u = username.clone();
+        let db_u    = s.db.clone();
+        let user_u  = username.clone();
+        let ip_log  = caller_ip_u.clone();
         tokio::spawn(async move {
             log_evento_com_ip(&db_u, "ip_desbloqueado",
                 &format!("IP desbloqueado após login bem-sucedido: utilizador '{}'", user_u),
-                &caller_ip_u).await;
+                &ip_log).await;
         });
         tokio::task::spawn_blocking(move || {
             for server_ip in &todos_ips {
@@ -156,7 +157,8 @@ pub async fn auth_logout(State(s): State<Shared>, auth: AuthUser) -> Json<Value>
         cache.insert(auth.jti.clone(), exp_ts);
     }
 
-    log_evento_bg(&s.db, "logout", &format!("Sessão terminada: utilizador '{}'", auth.username));
+    log_evento_bg(&s.db, "logout",
+        &format!("Sessão terminada: utilizador '{}' (token revogado)", auth.username));
     Json(serde_json::json!({"ok": true}))
 }
 

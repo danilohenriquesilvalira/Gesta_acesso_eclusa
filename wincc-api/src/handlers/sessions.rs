@@ -401,14 +401,23 @@ pub async fn encerrar_agente(
 /// Limpa failover_ips para este cliente (o reserva fica livre).
 pub async fn voltar_original(
     State(s):  State<Shared>,
-    _auth:     AuthUser,
+    auth:      AuthUser,
     Json(req): Json<EncerrarReq>, // reutiliza { cliente }
 ) -> Json<serde_json::Value> {
     if !["eclusa_RG", "eclusa_PN"].contains(&req.cliente.as_str()) {
         return Json(serde_json::json!({"ok": false, "erro": "Cliente inválido"}));
     }
     s.failover_ips.write().await.remove(&req.cliente);
-    tracing::info!(cliente = %req.cliente, "failover_ips limpo — voltou ao servidor original");
+    tracing::info!(cliente = %req.cliente, operador = %auth.username, "failover_ips limpo — voltou ao servidor original");
+
+    let db  = s.db.clone();
+    let cli = req.cliente.clone();
+    let op  = auth.username.clone();
+    tokio::spawn(async move {
+        log_evento(&db, "retorno_original",
+            &format!("Retorno ao servidor original confirmado: operador '{}' em {} — failover encerrado", op, cli)).await;
+    });
+
     Json(serde_json::json!({"ok": true}))
 }
 

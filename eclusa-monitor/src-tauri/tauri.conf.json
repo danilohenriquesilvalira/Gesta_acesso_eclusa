@@ -14,13 +14,26 @@
       {
         "label": "main",
         "title": "Controlo de Acesso — Eclusas WinCC",
-        "width": 2560,
-        "height": 1440,
-        "x": 628,
-        "y": -1440,
+        "width": 1920,
+        "height": 1080,
+        "x": 0,
+        "y": 0,
         "fullscreen": true,
         "decorations": false,
         "resizable": false
+      },
+      {
+        "label": "mapa",
+        "title": "Mapa — Eclusas EDP",
+        "url": "mapa.html",
+        "width": 1920,
+        "height": 1080,
+        "x": 0,
+        "y": -1080,
+        "fullscreen": false,
+        "decorations": false,
+        "resizable": false,
+        "visible": false
       }
     ],
     "security": {

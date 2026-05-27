@@ -139,10 +139,10 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
       width:  "minmax(0,1.4fr)",
       render: e => e.servidor_ip ? (
         <div className="flex items-center gap-1.5">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F7D200" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
           </svg>
-          <span className="font-mono font-bold text-[12px]" style={{ color: "#F59E0B" }}>{e.servidor_ip}</span>
+          <span className="font-mono font-bold text-[12px]" style={{ color: "#F7D200" }}>{e.servidor_ip}</span>
         </div>
       ) : (
         <span className="text-[11px]" style={{ color: "#BECACC" }}>—</span>
@@ -153,10 +153,10 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
       width:  "minmax(0,1.4fr)",
       render: e => e.utilizador ? (
         <div className="flex items-center gap-1.5">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0CD3F8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          <span className="font-mono text-[12px] font-semibold" style={{ color: "#60A5FA" }}>{e.utilizador}</span>
+          <span className="font-mono text-[12px] font-semibold" style={{ color: "#0CD3F8" }}>{e.utilizador}</span>
         </div>
       ) : (
         <span className="text-[11px]" style={{ color: "#BECACC" }}>—</span>
@@ -209,7 +209,7 @@ export default function AdminBlacklist({ apiUrl, token }: Props) {
           style={{ background: "rgba(0,0,0,0.55)" }}
           onClick={() => setConfirmar(null)}>
           <div className="rounded-2xl p-6 w-[380px] shadow-2xl"
-            style={{ background: "#1A2535", border: "1px solid rgba(227,44,44,0.3)" }}
+            style={{ background: "#212E3E", border: "1px solid rgba(227,44,44,0.3)" }}
             onClick={e => e.stopPropagation()}>
 
             {/* Ícone + título */}

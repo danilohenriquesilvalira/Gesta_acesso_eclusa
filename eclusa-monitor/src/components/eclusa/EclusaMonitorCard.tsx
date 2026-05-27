@@ -88,8 +88,10 @@ export default function EclusaMonitorCard({
           <p className={`text-[12px] font-bold text-center py-4 ${isWhite ? "text-slate-400" : "text-white/25"}`}>Servidor RDP inacessível</p>
         ) : euSuperviso ? (
           <div className="flex flex-col gap-4">
-            <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-blue-50 border border-blue-100" : "bg-blue-500/10 border border-blue-500/20"}`}>
-              <p className={`text-[10px] font-bold uppercase tracking-wide ${isWhite ? "text-blue-600" : "text-blue-400"}`}>A supervisionar</p>
+            <div className={`px-4 py-3 rounded-xl ${isWhite ? "bg-blue-50 border border-blue-100" : ""}`}
+              style={!isWhite ? { background: "rgba(38,60,200,0.12)", border: "1px solid rgba(125,138,222,0.25)" } : {}}>
+              <p className="text-[10px] font-bold uppercase tracking-wide"
+                style={{ color: isWhite ? "#263CC8" : "#7D8ADE" }}>A supervisionar</p>
               <p className={`font-black mt-1 ${isWhite ? "text-[18px] text-[#212E3E]" : "text-[13px] text-white"}`}>{utilizadorAtual}</p>
             </div>
             {outrosSuperv.length > 0 && (
@@ -98,7 +100,7 @@ export default function EclusaMonitorCard({
                 <div className="flex flex-col gap-1">
                   {outrosSuperv.map((s, i) => (
                     <div key={i} className="flex items-center gap-2 min-w-0">
-                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isWhite ? "#263CC8" : "#60a5fa" }} />
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isWhite ? "#263CC8" : "#7D8ADE" }} />
                       <p className={`font-bold text-[12px] truncate ${isWhite ? "text-[#212E3E]" : "text-white/80"}`}>{s.supervisor}</p>
                     </div>
                   ))}
