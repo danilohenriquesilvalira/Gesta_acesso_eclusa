@@ -494,6 +494,7 @@ pub fn broadcast_estado(st: &crate::state::AppStateInner, tx: &tokio::sync::broa
         "operadores":       st.operadores,
         "plc_health":       st.plc_health,
         "servidor_health":  st.servidor_health,
+        "plc_dados":        st.plc_dados,
         "timestamp":        now()
     })).unwrap_or_default();
 

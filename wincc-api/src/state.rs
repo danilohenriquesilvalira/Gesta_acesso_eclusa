@@ -3,7 +3,7 @@ use tokio::sync::{broadcast, RwLock};
 
 use crate::{
     config::{load_rdp_clients, load_servidores, Config, RdpClient},
-    types::{PlcHealthMap, RdpMap, ServidorHealth, ServidorHealthMap, Sessoes, Supervisoes},
+    types::{PlcDados, PlcHealthMap, RdpMap, ServidorHealth, ServidorHealthMap, Sessoes, Supervisoes},
 };
 use sqlx::PgPool;
 
@@ -24,6 +24,9 @@ pub struct AppStateInner {
     /// Persiste em disco em background; nunca lê do disco em runtime.
     pub eclusas:          serde_json::Value,
     pub servidor_health:  ServidorHealthMap,
+    /// Últimos dados recebidos de cada PLC via Node-RED (POST /plc/dados).
+    /// Chave: plc id (ex: "eclusa_rg"). Nunca persiste em disco — reconstruído em runtime.
+    pub plc_dados:        std::collections::HashMap<String, PlcDados>,
 }
 
 // ── Outer AppState — database pool and channels are already thread-safe ────────

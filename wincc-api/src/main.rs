@@ -27,6 +27,7 @@ use db::{bootstrap_admin_if_needed, cleanup_loop, create_pool, load_operadores, 
 use handlers::{
     eclusas::{atualizar_eclusa, get_eclusas, ler_eclusas_do_disco},
     misc::{add_operador, admin_rdp_direto, del_operador, get_logs, get_operadores, health},
+    plc::{get_dados_plc, receber_dados_plc},
     sessions::{encerrar, encerrar_agente, get_estado, get_sessoes, iniciar, sessoes_simples, shadow_simples, sse_eventos, voltar_original},
     stream::{get_mjpeg, post_frame, ws_viewer},
     supervisao::{encerrar_supervisao, iniciar_supervisao},
@@ -368,6 +369,8 @@ async fn main() {
         .route("/blacklist/:id",             delete(remove_blacklist))
         .route("/admin/force-logout",        post(admin_force_logout))
         .route("/admin/rdp-direto",          post(admin_rdp_direto))
+        // ── PLC — Node-RED envia dados dos PLCs (sem auth, LAN only) ────────────
+        .route("/plc/dados",                 get(get_dados_plc).post(receber_dados_plc))
         // ── Heartbeat — wincc-agent em cada Windows Server (sem auth, LAN only) ─
         .route("/heartbeat/:servidor",        post(heartbeat))
         .route("/wincc-status/:servidor",    post(wincc_status))

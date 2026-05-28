@@ -166,3 +166,25 @@ pub struct EclusaEstadoReq {
     pub posto:   String,
     pub usuario: String,
 }
+
+// ── PLC — dados recebidos do Node-RED ─────────────────────────────────────────
+
+/// Payload enviado pelo Node-RED para POST /plc/dados
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlcDadosReq {
+    /// Identificador do PLC (ex: "eclusa_rg", "eclusa_pn")
+    pub plc:       String,
+    /// Timestamp ISO 8601 (gerado pelo Node-RED)
+    pub timestamp: Option<String>,
+    /// Dados brutos do PLC — qualquer estrutura JSON
+    pub dados:     serde_json::Value,
+}
+
+/// Snapshot de dados de um PLC em memória (último valor recebido)
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct PlcDados {
+    pub plc:           String,
+    pub ultimo_update: String,
+    pub dados:         serde_json::Value,
+    pub online:        bool,
+}
