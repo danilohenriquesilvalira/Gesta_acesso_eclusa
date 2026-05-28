@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::{
     auth::AuthUser,
-    db::audit::log_evento,
+    db::audit::{self, tipo},
     rdp::broadcast_estado,
     state::Shared,
     types::{now, EncerrarSupervisaoReq, Supervisao, SupervisaoReq},
@@ -64,10 +64,11 @@ pub async fn iniciar_supervisao(
 
     tracing::info!(supervisor = %req.supervisor, cliente = %req.cliente, sessao_id, total_supervisores = total, "Supervisão iniciada");
 
-    let db  = s.db.clone();
-    let msg = format!("Supervisão iniciada: {} em {} sessão {} (total: {})",
-        req.supervisor, req.cliente, sessao_id, total);
-    tokio::spawn(async move { log_evento(&db, "supervisao_iniciada", &msg).await; });
+    let db     = s.db.clone();
+    let eclusa = if req.cliente == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+    let msg    = format!("'{}' iniciou supervisão na {} (sessão RDP #{}, total supervisores: {})",
+        req.supervisor, eclusa, sessao_id, total);
+    tokio::spawn(async move { audit::log(&db, tipo::SUPERVISAO_INICIADA, &msg, None).await; });
 
     Json(serde_json::json!({
         "ok":        true,
@@ -99,9 +100,14 @@ pub async fn encerrar_supervisao(
 
     tracing::info!(supervisor = %req.supervisor, cliente = %req.cliente, "Supervisão encerrada");
 
-    let db  = s.db.clone();
-    let msg = format!("Supervisão encerrada: {} em {} (por: {})", req.supervisor, req.cliente, auth.username);
-    tokio::spawn(async move { log_evento(&db, "supervisao_encerrada", &msg).await; });
+    let db     = s.db.clone();
+    let eclusa = if req.cliente == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+    let msg    = if req.supervisor.eq_ignore_ascii_case(&auth.username) {
+        format!("'{}' terminou supervisão na {}", req.supervisor, eclusa)
+    } else {
+        format!("Supervisão de '{}' na {} encerrada pelo administrador '{}'", req.supervisor, eclusa, auth.username)
+    };
+    tokio::spawn(async move { audit::log(&db, tipo::SUPERVISAO_ENCERRADA, &msg, None).await; });
 
     Json(serde_json::json!({"ok": true}))
 }

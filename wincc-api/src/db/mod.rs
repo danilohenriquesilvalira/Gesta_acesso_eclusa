@@ -126,5 +126,17 @@ pub async fn cleanup_loop(state: crate::state::Shared) {
             let mut cache = state.revoked_jtis.write().await;
             cache.retain(|_, &mut exp_ts| exp_ts > now_ts);
         }
+
+        // Limpa rate limiting de login (janelas de 5 min já expiradas)
+        {
+            let mut attempts = state.login_attempts.write().await;
+            attempts.retain(|_, (_, inicio)| inicio.elapsed().as_secs() < 300);
+        }
+
+        // Limpa heartbeats de servidores que já não existem (mais de 1h sem heartbeat)
+        {
+            let mut hb = state.heartbeats.write().await;
+            hb.retain(|_, t| t.elapsed().as_secs() < 3_600);
+        }
     }
 }

@@ -97,7 +97,7 @@ export default function App() {
     }
   }, []);
 
-  const { estado, servidorHealth, apiOk, fetchEstado } = useEstado(apiUrl, ipReserva, onFailoverStable, onVoltouStable);
+  const { estado, servidorHealth, apiOk, fetchEstado } = useEstado(apiUrl, ipReserva, onFailoverStable, onVoltouStable, token);
 
   const onFailoverManual = useCallback((cliente: string, idReserva: string, _ipR: string) => {
     const clienteKey = ECLUSA_CLIENTE[cliente] ?? cliente;

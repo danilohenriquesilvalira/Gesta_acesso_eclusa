@@ -4,7 +4,6 @@ mod db;
 mod failover;
 mod handlers;
 mod middleware;
-mod plc;
 mod rdp;
 mod state;
 mod types;
@@ -20,16 +19,15 @@ use std::{net::SocketAddr, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::{
     compression::CompressionLayer,
-    cors::{Any, CorsLayer},
+    cors::CorsLayer,
     trace::TraceLayer,
 };
 
 use config::load_config;
-use db::{bootstrap_admin_if_needed, cleanup_loop, create_pool, load_operadores, verify_schema};
+use db::{audit, bootstrap_admin_if_needed, cleanup_loop, create_pool, load_operadores, verify_schema};
 use handlers::{
     eclusas::{atualizar_eclusa, get_eclusas, ler_eclusas_do_disco},
     misc::{add_operador, admin_rdp_direto, del_operador, get_logs, get_operadores, health},
-    plc::{get_dados_plc, receber_dados_plc},
     sessions::{encerrar, encerrar_agente, get_estado, get_sessoes, iniciar, sessoes_simples, shadow_simples, sse_eventos, voltar_original},
     stream::{get_mjpeg, post_frame, ws_viewer},
     supervisao::{encerrar_supervisao, iniciar_supervisao},
@@ -99,33 +97,43 @@ async fn servidor_health_watchdog(state: state::Shared) {
     loop {
         tokio::time::sleep(Duration::from_secs(3)).await;
 
+        // Fase 1: leitura de heartbeats (read lock curto)
         let heartbeats = state.heartbeats.read().await.clone();
-        let mut st     = state.inner.write().await;
-        let mut mudou  = false;
 
-        // 1. Atualiza windows_vivo com base nos heartbeats
-        for (srv, health) in st.servidor_health.iter_mut() {
-            let hb_ok = heartbeats.get(srv)
-                .map(|t| t.elapsed().as_secs() < TIMEOUT_SECS)
-                .unwrap_or(false);
+        // Fase 2: write lock curto — apenas atualiza windows_vivo e tira snapshot
+        let (snapshot, mudou) = {
+            let mut st    = state.inner.write().await;
+            let mut mudou = false;
 
-            if health.windows_vivo != hb_ok {
-                health.windows_vivo = hb_ok;
-                if !hb_ok { health.wincc_vivo = false; }
-                mudou = true;
-                if hb_ok {
-                    tracing::info!(servidor = %srv, "Servidor ONLINE");
-                } else {
-                    tracing::warn!(servidor = %srv, "Servidor OFFLINE — heartbeat parou");
+            for (srv, health) in st.servidor_health.iter_mut() {
+                let hb_ok = heartbeats.get(srv)
+                    .map(|t| t.elapsed().as_secs() < TIMEOUT_SECS)
+                    .unwrap_or(false);
+
+                if health.windows_vivo != hb_ok {
+                    health.windows_vivo = hb_ok;
+                    if !hb_ok { health.wincc_vivo = false; }
+                    mudou = true;
+                    if hb_ok {
+                        tracing::info!(servidor = %srv, "Servidor ONLINE");
+                    } else {
+                        tracing::warn!(servidor = %srv, "Servidor OFFLINE — heartbeat parou");
+                    }
                 }
             }
-        }
 
-        // 2. Deteta transições e emite eventos SSE de failover / retorno
-        let snapshot: Vec<(String, String, bool, bool)> = st.servidor_health
-            .iter()
-            .map(|(id, h)| (id.clone(), h.ip.clone(), h.windows_vivo, h.wincc_vivo))
-            .collect();
+            let snapshot: Vec<(String, String, bool, bool)> = st.servidor_health
+                .iter()
+                .map(|(id, h)| (id.clone(), h.ip.clone(), h.windows_vivo, h.wincc_vivo))
+                .collect();
+
+            if mudou { rdp::broadcast_estado(&st, &state.sse_tx); }
+            (snapshot, mudou)
+            // write lock liberto aqui
+        };
+
+        // Fase 3: lógica de failover sem lock (usa apenas snapshot + reads separados)
+        let _ = mudou; // usado acima
 
         // Reserva disponível = windows_vivo=true E wincc_vivo=true (WinCC já a correr)
         let reserva_disponivel: Option<(String, String)> = RESERVAS.iter()
@@ -158,9 +166,29 @@ async fn servidor_health_watchdog(state: state::Shared) {
             // Servidor caiu (windows OU wincc ficou false)
             let caiu = (prev.0 && !agora.0) || (prev.1 && !agora.1);
             if caiu {
+                // Auditoria: registar o tipo de queda
+                let db_audit = state.db.clone();
+                let srv_audit = id.clone();
+                let ip_audit  = ip_original.clone();
+                if prev.0 && !agora.0 {
+                    // Windows caiu (heartbeat perdido)
+                    tokio::spawn(async move {
+                        let msg = format!("Servidor '{}' ({}) ficou sem resposta — Windows inacessível (heartbeat perdido)", srv_audit, ip_audit);
+                        audit::log(&db_audit, audit::tipo::FAILOVER_WINDOWS_CAIU, &msg, None).await;
+                    });
+                } else if prev.1 && !agora.1 {
+                    // WinCC caiu (windows ainda up mas wincc_vivo=false)
+                    tokio::spawn(async move {
+                        let msg = format!("WinCC no servidor '{}' ({}) ficou offline — Windows acessível mas WinCC não responde", srv_audit, ip_audit);
+                        audit::log(&db_audit, audit::tipo::FAILOVER_WINCC_CAIU, &msg, None).await;
+                    });
+                }
+
                 // Dispara failover se há sessão registada OU se o RDP estava ocupado
                 // (o rdp_poll_loop pode limpar sessoes.conectado antes do watchdog detetar a queda)
+                // Read lock curto — liberto imediatamente após leitura
                 let cliente_ativo = {
+                    let st = state.inner.read().await;
                     let sessao_ok = match id.as_str() {
                         "RG" => st.sessoes.eclusa_RG.conectado,
                         "PN" => st.sessoes.eclusa_PN.conectado,
@@ -197,6 +225,19 @@ async fn servidor_health_watchdog(state: state::Shared) {
                         }).to_string();
                         let _ = state.sse_tx.send(payload);
                         tracing::warn!(servidor = %id, reserva = %id_reserva, ip_reserva = %ip_reserva, "SSE failover enviado — cliente ativo");
+
+                        // Auditoria: failover activado com operador em sessão
+                        let db_fo  = state.db.clone();
+                        let srv_fo = id.clone();
+                        let res_fo = id_reserva.clone();
+                        let ip_res = ip_reserva.clone();
+                        let motivo = if !agora.0 { "Windows inacessível" } else { "WinCC offline" }.to_string();
+                        let ck_fo  = cliente_key.to_string();
+                        tokio::spawn(async move {
+                            let eclusa = if ck_fo == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+                            let msg = format!("Failover activado para {} — servidor '{}' falhou ({}), operador redirecionado para reserva '{}' ({})", eclusa, srv_fo, motivo, res_fo, ip_res);
+                            audit::log(&db_fo, audit::tipo::FAILOVER_INICIADO, &msg, None).await;
+                        });
                     } else {
                         tracing::warn!(servidor = %id, reserva = %id_reserva, "Servidor caiu — failover_ips atualizado, sem cliente ativo para reconectar");
                     }
@@ -217,10 +258,14 @@ async fn servidor_health_watchdog(state: state::Shared) {
                 // e obter o operador registado — só esse PC deve reconectar
                 let (tem_sessao_no_reserva, operador_no_reserva) = if !cliente_key.is_empty() {
                     let em_failover = state.failover_ips.read().await.contains_key(cliente_key);
-                    let (sessao_ativa, operador) = match id.as_str() {
-                        "RG" => (st.sessoes.eclusa_RG.conectado, st.sessoes.eclusa_RG.operador.clone()),
-                        "PN" => (st.sessoes.eclusa_PN.conectado, st.sessoes.eclusa_PN.operador.clone()),
-                        _    => (false, String::new()),
+                    // Read lock curto só para ler sessão
+                    let (sessao_ativa, operador) = {
+                        let st = state.inner.read().await;
+                        match id.as_str() {
+                            "RG" => (st.sessoes.eclusa_RG.conectado, st.sessoes.eclusa_RG.operador.clone()),
+                            "PN" => (st.sessoes.eclusa_PN.conectado, st.sessoes.eclusa_PN.operador.clone()),
+                            _    => (false, String::new()),
+                        }
                     };
                     (em_failover && sessao_ativa, operador)
                 } else {
@@ -236,21 +281,40 @@ async fn servidor_health_watchdog(state: state::Shared) {
                         "ip_original":     ip_original,
                         "cliente_key":     cliente_key,
                         "reconectar_auto": true,
-                        "operador":        operador_no_reserva,
+                        "operador":        operador_no_reserva.clone(),
                     }).to_string();
                     let _ = state.sse_tx.send(payload);
                     tracing::info!(servidor = %id, ip = %ip_original, "SSE servidor_voltou — reconexão automática em curso");
 
+                    // Auditoria: servidor recuperado com operador a reconectar
+                    let db_rv  = state.db.clone();
+                    let srv_rv = id.clone();
+                    let ip_rv  = ip_original.clone();
+                    let op_rv  = operador_no_reserva.clone();
+                    let ck_rv  = cliente_key.to_string();
+                    tokio::spawn(async move {
+                        let eclusa = if ck_rv == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+                        let msg = format!("Servidor '{}' ({}) recuperado — failover encerrado, operador '{}' a reconectar à {}", srv_rv, ip_rv, op_rv, eclusa);
+                        audit::log(&db_rv, audit::tipo::FAILOVER_RESOLVIDO, &msg, None).await;
+                    });
+
                     // Timeout de segurança: se o frontend não confirmar via /sessoes/voltar-original
-                    // em 30s, limpa failover_ips automaticamente para desbloquear o reserva.
+                    // em 60s, limpa failover_ips automaticamente para desbloquear o reserva.
+                    // Usa 60s (era 30s) para dar margem em caso de rede lenta.
+                    // Só limpa se o valor ainda é o mesmo IP de reserva — evita limpar
+                    // um failover novo que entretanto foi registado para o mesmo cliente.
                     let state_clone  = state.clone();
                     let ck           = cliente_key.to_string();
+                    let ip_reserva_esperado = {
+                        state.failover_ips.read().await.get(&ck).cloned().unwrap_or_default()
+                    };
                     tokio::spawn(async move {
-                        tokio::time::sleep(Duration::from_secs(30)).await;
+                        tokio::time::sleep(Duration::from_secs(60)).await;
                         let mut fips = state_clone.failover_ips.write().await;
-                        if fips.contains_key(&ck) {
+                        // Só remove se o IP de failover não mudou entretanto
+                        if fips.get(&ck).map(|ip| ip == &ip_reserva_esperado).unwrap_or(false) {
                             fips.remove(&ck);
-                            tracing::warn!(cliente = %ck, "failover_ips limpo por timeout (frontend não confirmou em 30s)");
+                            tracing::warn!(cliente = %ck, "failover_ips limpo por timeout (frontend não confirmou em 60s)");
                         }
                     });
                 } else {
@@ -267,14 +331,19 @@ async fn servidor_health_watchdog(state: state::Shared) {
                     }).to_string();
                     let _ = state.sse_tx.send(payload);
                     tracing::info!(servidor = %id, ip = %ip_original, "SSE servidor_voltou — sem sessão ativa, failover_ips limpo");
+
+                    // Auditoria: servidor recuperado sem operador em failover
+                    let db_rv  = state.db.clone();
+                    let srv_rv = id.clone();
+                    let ip_rv  = ip_original.clone();
+                    tokio::spawn(async move {
+                        let msg = format!("Servidor '{}' ({}) recuperado — voltou a ficar online (sem sessão em failover ativa)", srv_rv, ip_rv);
+                        audit::log(&db_rv, audit::tipo::FAILOVER_RESOLVIDO, &msg, None).await;
+                    });
                 }
             }
 
             anterior.insert(id.clone(), agora);
-        }
-
-        if mudou {
-            rdp::broadcast_estado(&st, &state.sse_tx);
         }
     }
 }
@@ -320,13 +389,24 @@ async fn main() {
     // ── Background tasks ──────────────────────────────────────────────────────
     tokio::spawn(rdp_poll_loop(state.clone()));
     tokio::spawn(servidores_poll_loop(state.clone()));
-    tokio::spawn(plc::plc_health_loop(state.clone()));
     tokio::spawn(failover::failover_monitor_loop(state.clone()));
     tokio::spawn(cleanup_loop(state.clone()));
     tokio::spawn(servidor_health_watchdog(state.clone()));
 
     // ── Middleware ────────────────────────────────────────────────────────────
-    let cors        = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
+    // CORS restrito às origens configuradas em ALLOWED_ORIGINS (.env)
+    // Tauri usa "tauri://localhost" como origin — incluir sempre
+    let cors = {
+        use axum::http::HeaderValue;
+        use tower_http::cors::AllowOrigin;
+        let origins: Vec<HeaderValue> = cfg.allowed_origins.iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
+        CorsLayer::new()
+            .allow_origin(AllowOrigin::list(origins))
+            .allow_methods(tower_http::cors::Any)
+            .allow_headers(tower_http::cors::Any)
+    };
     let compression = CompressionLayer::new();
 
     // Timeout de 30s — protege o servidor de handlers suspensos indefinidamente
@@ -342,7 +422,6 @@ async fn main() {
     let lan_routes = Router::new()
         .route("/stream/:cliente/frame",     post(post_frame))
         .route("/eclusas/:id/estado",        post(atualizar_eclusa))
-        .route("/plc/dados",                 post(receber_dados_plc))
         .route("/heartbeat/:servidor",       post(heartbeat))
         .route("/wincc-status/:servidor",    post(wincc_status))
         .layer(axum_middleware::from_fn(middleware::apenas_lan));
@@ -372,7 +451,6 @@ async fn main() {
         .route("/operadores",                get(get_operadores).post(add_operador))
         .route("/operadores/:nome",          delete(del_operador))
         .route("/logs",                      get(get_logs))
-        .route("/plc/dados",                 get(get_dados_plc))
         .route("/usuarios",                  get(list_usuarios).post(create_usuario))
         .route("/usuarios/:username",        get(get_usuario).put(update_usuario).delete(delete_usuario))
         .route("/blacklist",                 get(list_blacklist).post(add_blacklist))

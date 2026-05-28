@@ -3,7 +3,7 @@ use tokio::sync::{broadcast, RwLock};
 
 use crate::{
     config::{load_rdp_clients, load_servidores, Config, RdpClient},
-    types::{PlcDados, PlcHealthMap, RdpMap, ServidorHealth, ServidorHealthMap, Sessoes, Supervisoes},
+    types::{PlcHealthMap, RdpMap, ServidorHealth, ServidorHealthMap, Sessoes, Supervisoes},
 };
 use sqlx::PgPool;
 
@@ -24,9 +24,6 @@ pub struct AppStateInner {
     /// Persiste em disco em background; nunca lê do disco em runtime.
     pub eclusas:          serde_json::Value,
     pub servidor_health:  ServidorHealthMap,
-    /// Últimos dados recebidos de cada PLC via Node-RED (POST /plc/dados).
-    /// Chave: plc id (ex: "eclusa_rg"). Nunca persiste em disco — reconstruído em runtime.
-    pub plc_dados:        std::collections::HashMap<String, PlcDados>,
 }
 
 // ── Outer AppState — database pool and channels are already thread-safe ────────
@@ -60,6 +57,9 @@ pub struct AppState {
     /// Quando presente, rdp_poll_loop monitoriza este IP em vez do IP principal.
     /// Limpo quando o servidor original volta online.
     pub failover_ips: RwLock<HashMap<String, String>>,
+    /// Rate limiting para /auth/login: ip → (contagem, janela_inicio)
+    /// Janela de 5 minutos, máx 10 tentativas. Limpo pelo cleanup_loop.
+    pub login_attempts: RwLock<HashMap<String, (u32, std::time::Instant)>>,
 }
 
 impl AppState {
@@ -109,11 +109,12 @@ impl AppState {
             rdp_clients,
             servidores,
             cfg,
-            force_logout:  RwLock::new(HashMap::new()),
-            revoked_jtis:  RwLock::new(HashMap::new()),
-            heartbeats:    RwLock::new(HashMap::new()),
-            admin_rdp:     RwLock::new(HashMap::new()),
-            failover_ips:  RwLock::new(HashMap::new()),
+            force_logout:    RwLock::new(HashMap::new()),
+            revoked_jtis:    RwLock::new(HashMap::new()),
+            heartbeats:      RwLock::new(HashMap::new()),
+            admin_rdp:       RwLock::new(HashMap::new()),
+            failover_ips:    RwLock::new(HashMap::new()),
+            login_attempts:  RwLock::new(HashMap::new()),
         })
     }
 

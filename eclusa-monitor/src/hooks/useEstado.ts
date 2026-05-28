@@ -10,6 +10,7 @@ export function useEstado(
   _ipReserva:  string,
   onFailover?: (p: FailoverPayload) => void,
   onVoltou?:   (p: VoltouPayload)   => void,
+  token?:      string,
 ) {
   const [estado,          setEstado]          = useState<Estado | null>(null);
   const [servidorHealth,  setServidorHealth]  = useState<Record<string, ServidorHealth>>({});
@@ -68,7 +69,16 @@ export function useEstado(
   useEffect(() => {
     fetchEstado();
 
-    const es = new EventSource(`${apiUrl}/eventos`);
+    // Sem token (logout ou sessão não iniciada) — não abrir SSE, apenas poll passivo.
+    // Garante que apiOk reflecte o estado real do backend (não um 401 do SSE sem token).
+    if (!token) {
+      setApiOk(prev => prev === false ? null : prev); // reset erro anterior se existia
+      const poll = setInterval(fetchEstado, 5_000);
+      return () => clearInterval(poll);
+    }
+
+    const sseUrl = `${apiUrl}/eventos?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(sseUrl);
 
     es.onmessage = e => {
       try {
@@ -101,8 +111,9 @@ export function useEstado(
     };
 
     es.onerror = () => {
+      // Só marca backend offline se o SSE caiu por razão de rede (não por falta de token)
+      // token já foi validado acima — se chega aqui é falha de ligação real
       setApiOk(false);
-      // SSE caiu — poll a cada 5s até reconectar (não 2s para não stressar)
     };
 
     // Poll apenas como fallback quando SSE cai — intervalo longo
@@ -111,7 +122,7 @@ export function useEstado(
     }, 5_000);
 
     return () => { es.close(); clearInterval(poll); };
-  }, [apiUrl, fetchEstado, processarEstado]);
+  }, [apiUrl, token, fetchEstado, processarEstado]);
 
   return { estado, servidorHealth, apiOk, fetchEstado };
 }

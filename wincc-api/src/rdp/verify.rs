@@ -34,10 +34,11 @@ fn verificar_rdp_impl(ip: &str, cfg: &Config) -> RdpInfo {
 
     // TCP connect à porta 3389 — TermService fecha cedo no shutdown,
     // muito antes do SSH bloquear. Timeout 1s é suficiente.
-    let rdp_port_ok = std::net::TcpStream::connect_timeout(
-        &format!("{}:3389", ip).parse().unwrap_or("0.0.0.0:3389".parse().unwrap()),
-        Duration::from_secs(1),
-    ).is_ok();
+    let addr = match format!("{}:3389", ip).parse() {
+        Ok(a)  => a,
+        Err(_) => return RdpInfo { verificado: false, timestamp: now(), ..Default::default() },
+    };
+    let rdp_port_ok = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(1)).is_ok();
 
     if !rdp_port_ok {
         return RdpInfo { verificado: false, timestamp: now(), ..Default::default() };

@@ -49,12 +49,15 @@ pub async fn get_mjpeg(
         Some(Ok::<Bytes, Infallible>(Bytes::from(data)))
     });
 
-    axum::response::Response::builder()
+    match axum::response::Response::builder()
         .header("Content-Type", "multipart/x-mixed-replace; boundary=mjpeg")
         .header("Cache-Control", "no-cache, no-store, must-revalidate")
         .header("Access-Control-Allow-Origin", "*")
         .body(axum::body::Body::from_stream(stream))
-        .unwrap()
+    {
+        Ok(r)  => r,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 /// GET /stream/:cliente/ws — WebSocket para latência mínima (Tauri usa este)

@@ -6,7 +6,7 @@ use tokio::time::sleep;
 
 use crate::{
     config::STARTUP_GRACE_SECS,
-    db::audit::{log_evento, log_evento_bg},
+    db::audit::{self, tipo},
     state::Shared,
     types::{now, RdpInfo},
 };
@@ -146,7 +146,7 @@ pub async fn rdp_poll_loop(state: Shared) {
                         .unwrap_or(false)
                     };
                     let sups_vazias = sups.is_empty();
-                    drop(sessao); drop(sups);
+                    let _ = sessao; let _ = sups;
 
                     if sessao_velha {
                         match cliente.as_str() {
@@ -155,10 +155,9 @@ pub async fn rdp_poll_loop(state: Shared) {
                                 tracing::info!(cliente = %cliente, operador = %op, "Sessão auto-encerrada — RDP livre há mais de 30s");
                                 st.sessoes.eclusa_RG = Default::default();
                                 let db  = state.db.clone();
-                                let cli = cliente.clone();
                                 tokio::spawn(async move {
-                                    log_evento(&db, "sessao_auto_encerrada",
-                                        &format!("Sessão auto-encerrada: operador '{}' em {} — RDP desligado há mais de 30s", op, cli)).await;
+                                    let msg = format!("Sessão de '{}' na Eclusa RG encerrada automaticamente — RDP desligado há mais de 30s sem actividade", op);
+                                    audit::log(&db, tipo::SESSAO_AUTO_ENCERRADA, &msg, None).await;
                                 });
                             }
                             "eclusa_PN" => {
@@ -166,10 +165,9 @@ pub async fn rdp_poll_loop(state: Shared) {
                                 tracing::info!(cliente = %cliente, operador = %op, "Sessão auto-encerrada — RDP livre há mais de 30s");
                                 st.sessoes.eclusa_PN = Default::default();
                                 let db  = state.db.clone();
-                                let cli = cliente.clone();
                                 tokio::spawn(async move {
-                                    log_evento(&db, "sessao_auto_encerrada",
-                                        &format!("Sessão auto-encerrada: operador '{}' em {} — RDP desligado há mais de 30s", op, cli)).await;
+                                    let msg = format!("Sessão de '{}' na Eclusa PN encerrada automaticamente — RDP desligado há mais de 30s sem actividade", op);
+                                    audit::log(&db, tipo::SESSAO_AUTO_ENCERRADA, &msg, None).await;
                                 });
                             }
                             _ => {}
@@ -271,8 +269,9 @@ fn disconnect_unauthorized(
     cfg:        &crate::config::Config,
     db:         &sqlx::PgPool,
 ) {
-    log_evento_bg(db, "bloqueio",
-        &format!("Acesso não autorizado: '{}' em {} sessão {} — a desconectar", utilizador, server_ip, session_id));
+    audit::log_bg(db, tipo::SISTEMA_IP_BLOQUEADO,
+        &format!("Acesso RDP não autorizado detectado: utilizador '{}' em {} (sessão #{}) — a desconectar e bloquear", utilizador, server_ip, session_id),
+        None);
 
     // 1. Obter IP do cliente — necessário antes de tsdiscon (netstat deixa de mostrar após CLOSE_WAIT).
     //    Windows: WTS API é quase instantânea (~10ms). Linux: SSH netstat ~2-3s.
@@ -282,8 +281,9 @@ fn disconnect_unauthorized(
     // 2. tsdiscon + firewall em paralelo — ambos correm ao mesmo tempo.
     let server_ip_owned  = server_ip.to_string();
     let utilizador_owned = utilizador.to_string();
-    let cfg_fw  = cfg.clone();
-    let cfg_dis = cfg.clone();
+    let cfg_fw           = cfg.clone();
+    #[allow(unused_variables)]
+    let cfg_dis          = cfg.clone();
     let db_clone = db.clone();
 
     // Thread A: tsdiscon
@@ -321,11 +321,10 @@ fn disconnect_unauthorized(
         std::thread::spawn(move || {
             bloquear_ip(&server_ip_fw, &ip, &cfg_fw);
 
-            let reason   = format!("Acesso não autorizado: utilizador '{}' tentou aceder a {} — bloqueado automaticamente", utilizador_owned, server_ip_fw);
-            let msg_log  = format!("IP {} bloqueado — tentou aceder a {} como '{}'", ip, server_ip_fw, utilizador_owned);
-            let ip_clone       = ip.clone();
-            let srv_clone      = server_ip_fw.clone();
-            let user_clone     = utilizador_owned.clone();
+            let reason     = format!("Acesso RDP não autorizado: utilizador '{}' tentou aceder a {} — bloqueado automaticamente", utilizador_owned, server_ip_fw);
+            let ip_clone   = ip.clone();
+            let srv_clone  = server_ip_fw.clone();
+            let user_clone = utilizador_owned.clone();
             rt_handle.spawn(async move {
                 let _ = sqlx::query(
                     "INSERT INTO ip_blacklist (ip, reason, servidor_ip, utilizador) \
@@ -339,7 +338,8 @@ fn disconnect_unauthorized(
                 .execute(&db_clone)
                 .await;
 
-                log_evento(&db_clone, "bloqueio", &msg_log).await;
+                let msg = format!("IP {} bloqueado automaticamente — utilizador '{}' tentou aceder ao servidor {} sem autorização", ip_clone, user_clone, srv_clone);
+                audit::log(&db_clone, tipo::SISTEMA_IP_BLOQUEADO, &msg, Some(&ip_clone)).await;
             });
         });
     } else {
@@ -494,7 +494,6 @@ pub fn broadcast_estado(st: &crate::state::AppStateInner, tx: &tokio::sync::broa
         "operadores":       st.operadores,
         "plc_health":       st.plc_health,
         "servidor_health":  st.servidor_health,
-        "plc_dados":        st.plc_dados,
         "timestamp":        now()
     })).unwrap_or_default();
 

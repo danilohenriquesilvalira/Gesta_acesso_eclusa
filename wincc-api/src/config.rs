@@ -20,22 +20,20 @@ pub const DB_POOL_MAX:            u32 = 25;
 pub const DB_ACQUIRE_TIMEOUT_MS:  u64 = 5_000;
 /// Intervalo de heartbeat para PLCs (ms)
 pub const PLC_HEARTBEAT_MS:       u64 = 1_000;
-/// Falhas consecutivas antes de marcar PLC como degradado
-pub const PLC_FAIL_DEGRADED:      u32 = 3;
-/// Falhas consecutivas antes de marcar PLC como offline
-pub const PLC_FAIL_OFFLINE:       u32 = 5;
-/// Timeout de ligação TCP ao PLC (ms)
-pub const PLC_CONNECT_TIMEOUT_MS: u64 = 800;
 
 // ── Config principal ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub database_url: String,
-    pub jwt_secret:   String,
-    pub rdp_user:     String,
-    pub rdp_password: String,
-    pub api_port:     String,
+    pub database_url:   String,
+    pub jwt_secret:     String,
+    pub rdp_user:       String,
+    pub rdp_password:   String,
+    pub api_port:       String,
+    /// Origens permitidas no CORS, separadas por vírgula.
+    /// Ex: "http://172.29.164.10:1420,http://172.29.164.11:1420"
+    /// Se não definido, permite apenas 127.0.0.1 (seguro por defeito).
+    pub allowed_origins: Vec<String>,
     #[allow(dead_code)] pub ssh_key_path: String,
     #[allow(dead_code)] pub ssh_port:     u16,
     #[allow(dead_code)] pub reserva_ip:   String,
@@ -45,20 +43,28 @@ pub struct Config {
 pub fn load_config() -> Config {
     let _ = dotenvy::dotenv();
 
+    let allowed_origins = std::env::var("ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:1420,http://127.0.0.1:1420,tauri://localhost".into())
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
     Config {
-        database_url: require_env("DATABASE_URL"),
-        jwt_secret:   require_env("JWT_SECRET"),
-        rdp_user:     std::env::var("RDP_USER").unwrap_or_else(|_| "Administrator".into()),
-        rdp_password: require_env("RDP_PASSWORD"),
-        api_port:     std::env::var("API_PORT").unwrap_or_else(|_| "8080".into()),
-        ssh_key_path: std::env::var("SSH_KEY_PATH")
-                        .unwrap_or_else(|_| "/etc/wincc-api/ssh_key".into()),
-        ssh_port:     std::env::var("SSH_PORT").ok()
-                        .and_then(|p| p.parse().ok())
-                        .unwrap_or(22),
-        reserva_ip:   std::env::var("RESERVA_IP")
-                        .unwrap_or_else(|_| "172.29.164.15".into()),
-        agent_secret: std::env::var("AGENT_SECRET").ok(),
+        database_url:   require_env("DATABASE_URL"),
+        jwt_secret:     require_env("JWT_SECRET"),
+        rdp_user:       std::env::var("RDP_USER").unwrap_or_else(|_| "Administrator".into()),
+        rdp_password:   require_env("RDP_PASSWORD"),
+        api_port:       std::env::var("API_PORT").unwrap_or_else(|_| "8080".into()),
+        allowed_origins,
+        ssh_key_path:   std::env::var("SSH_KEY_PATH")
+                            .unwrap_or_else(|_| "/etc/wincc-api/ssh_key".into()),
+        ssh_port:       std::env::var("SSH_PORT").ok()
+                            .and_then(|p| p.parse().ok())
+                            .unwrap_or(22),
+        reserva_ip:     std::env::var("RESERVA_IP")
+                            .unwrap_or_else(|_| "172.29.164.15".into()),
+        agent_secret:   std::env::var("AGENT_SECRET").ok(),
     }
 }
 
@@ -103,53 +109,3 @@ pub fn load_servidores() -> Vec<RdpClient> {
     ]
 }
 
-// ── PLCs configurados ─────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone)]
-pub struct PlcConfig {
-    pub id:          String,
-    pub eclusa_code: String,
-    pub ip:          String,
-    pub port:        u16,
-}
-
-
-/// PLCs conhecidos — IPs confirmados pelo cliente
-pub fn load_plc_configs() -> Vec<PlcConfig> {
-    vec![
-        PlcConfig {
-            id:          "PLC-PN".into(),
-            eclusa_code: "PN".into(),
-            ip:          std::env::var("PLC_PN_IP").unwrap_or_else(|_| "172.29.160.33".into()),
-            port:        std::env::var("PLC_PN_PORT").ok()
-                            .and_then(|p| p.parse().ok())
-                            .unwrap_or(102),
-        },
-        PlcConfig {
-            id:          "PLC-RG".into(),
-            eclusa_code: "RG".into(),
-            ip:          std::env::var("PLC_RG_IP").unwrap_or_else(|_| "172.29.162.33".into()),
-            port:        std::env::var("PLC_RG_PORT").ok()
-                            .and_then(|p| p.parse().ok())
-                            .unwrap_or(102),
-        },
-        PlcConfig {
-            id:          "PLC-CL".into(),
-            eclusa_code: "CL".into(),
-            ip:          std::env::var("PLC_CL_IP").unwrap_or_else(|_| "10.10.1.10".into()),
-            port:        102,
-        },
-        PlcConfig {
-            id:          "PLC-CM".into(),
-            eclusa_code: "CM".into(),
-            ip:          std::env::var("PLC_CM_IP").unwrap_or_else(|_| "10.10.2.10".into()),
-            port:        102,
-        },
-        PlcConfig {
-            id:          "PLC-VR".into(),
-            eclusa_code: "VR".into(),
-            ip:          std::env::var("PLC_VR_IP").unwrap_or_else(|_| "10.10.5.10".into()),
-            port:        102,
-        },
-    ]
-}

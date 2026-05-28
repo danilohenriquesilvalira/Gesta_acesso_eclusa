@@ -1,28 +1,59 @@
 use axum::{
-    extract::{ConnectInfo, State},
+    extract::{ConnectInfo, Query, State},
+    http::StatusCode,
     response::sse::{Event, KeepAlive},
-    response::Sse,
+    response::{IntoResponse, Sse},
     Json,
 };
+use serde::Deserialize;
 use serde_json::Value;
 use std::{convert::Infallible, net::SocketAddr};
-use tokio_stream::{wrappers::BroadcastStream, Stream, StreamExt as _};
+use tokio_stream::{wrappers::BroadcastStream, StreamExt as _};
 
 use crate::{
-    auth::AuthUser,
-    db::audit::{log_evento, log_evento_com_ip},
+    auth::{verify_token, AuthUser},
+    db::audit::{self, tipo},
     rdp::{broadcast_estado, desbloquear_ip_firewall},
     state::Shared,
     types::{now, EncerrarReq, IniciarReq, Sessao},
 };
 
-/// GET /eventos — SSE stream com estado completo a cada mudança
-pub async fn sse_eventos(State(s): State<Shared>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+#[derive(Deserialize)]
+pub struct TokenQuery {
+    pub token: Option<String>,
+}
+
+/// GET /eventos?token=<jwt> — SSE stream com estado completo a cada mudança.
+/// Requer JWT válido via query string (EventSource não suporta headers).
+pub async fn sse_eventos(
+    State(s):    State<Shared>,
+    Query(q):    Query<TokenQuery>,
+) -> impl IntoResponse {
+    let token = match q.token {
+        Some(t) if !t.is_empty() => t,
+        _ => return (StatusCode::UNAUTHORIZED, "Token em falta").into_response(),
+    };
+
+    let claims = match verify_token(&token, &s.cfg.jwt_secret) {
+        Some(c) => c,
+        None    => return (StatusCode::UNAUTHORIZED, "Token inválido ou expirado").into_response(),
+    };
+
+    // Verificar revogação (cache em memória)
+    {
+        let cache = s.revoked_jtis.read().await;
+        if let Some(&exp_ts) = cache.get(&claims.jti) {
+            if chrono::Utc::now().timestamp() < exp_ts {
+                return (StatusCode::UNAUTHORIZED, "Sessão revogada").into_response();
+            }
+        }
+    }
+
     let rx = s.sse_tx.subscribe();
     let stream = BroadcastStream::new(rx)
         .filter_map(|r| r.ok())
         .map(|data| Ok::<Event, Infallible>(Event::default().data(data)));
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
 }
 
 /// GET /sessoes — estado das sessões activas (público — dashboard sem login)
@@ -219,10 +250,12 @@ pub async fn iniciar(
     });
 
     // Audit log em background
-    let db  = s.db.clone();
-    let msg = format!("Sessão iniciada: {} em {} por {} (IP: {})", req.operador, req.cliente, auth.username, caller_ip);
+    let db       = s.db.clone();
+    let eclusa   = if req.cliente == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+    let msg      = format!("'{}' iniciou sessão na {} (acesso por '{}')", req.operador, eclusa, auth.username);
+    let ip_clone = caller_ip.clone();
     tokio::spawn(async move {
-        log_evento_com_ip(&db, "sessao_iniciada", &msg, &caller_ip).await;
+        audit::log(&db, tipo::SESSAO_INICIADA, &msg, Some(&ip_clone)).await;
     });
 
     Json(serde_json::json!({"ok": true}))
@@ -293,9 +326,14 @@ pub async fn encerrar(
     }
 
     // Audit log
-    let db  = s.db.clone();
-    let msg = format!("Sessão encerrada: {} em {} (por: {})", operador, req.cliente, auth.username);
-    tokio::spawn(async move { log_evento(&db, "sessao_encerrada", &msg).await; });
+    let db     = s.db.clone();
+    let eclusa = if req.cliente == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+    let msg    = if operador.eq_ignore_ascii_case(&auth.username) {
+        format!("'{}' encerrou a própria sessão na {}", auth.username, eclusa)
+    } else {
+        format!("Sessão de '{}' na {} encerrada pelo administrador '{}'", operador, eclusa, auth.username)
+    };
+    tokio::spawn(async move { audit::log(&db, tipo::SESSAO_ENCERRADA, &msg, None).await; });
 
     Json(serde_json::json!({"ok": true}))
 }
@@ -389,9 +427,10 @@ pub async fn encerrar_agente(
         });
     }
 
-    let db  = s.db.clone();
-    let msg = format!("Sessão encerrada por WinCC (bit Encerrar_Sessao): {} em {}", operador, cliente);
-    tokio::spawn(async move { log_evento(&db, "sessao_encerrada_wincc", &msg).await; });
+    let db     = s.db.clone();
+    let eclusa = if cliente == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+    let msg    = format!("Sessão de '{}' na {} encerrada pelo WinCC (activação do bit Encerrar_Sessão)", operador, eclusa);
+    tokio::spawn(async move { audit::log(&db, tipo::SESSAO_ENCERRADA_WINCC, &msg, None).await; });
 
     tracing::info!(cliente = %cliente, operador = %operador, "Sessão encerrada por WinCC");
     Json(serde_json::json!({"ok": true}))
@@ -411,11 +450,11 @@ pub async fn voltar_original(
     tracing::info!(cliente = %req.cliente, operador = %auth.username, "failover_ips limpo — voltou ao servidor original");
 
     let db  = s.db.clone();
-    let cli = req.cliente.clone();
     let op  = auth.username.clone();
+    let eclusa = if req.cliente == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" };
+    let msg_ret = format!("'{}' reconectou à {} no servidor original — failover encerrado", op, eclusa);
     tokio::spawn(async move {
-        log_evento(&db, "retorno_original",
-            &format!("Retorno ao servidor original confirmado: operador '{}' em {} — failover encerrado", op, cli)).await;
+        audit::log(&db, tipo::SESSAO_RETORNO_ORIGINAL, &msg_ret, None).await;
     });
 
     Json(serde_json::json!({"ok": true}))

@@ -244,6 +244,7 @@ pub async fn get_logs(
 #[derive(serde::Deserialize)]
 pub struct AdminRdpReq {
     pub server_ip: String,
+    #[allow(dead_code)]
     pub client_ip: String,
 }
 
@@ -255,6 +256,22 @@ pub async fn admin_rdp_direto(
     _admin:    AdminUser,
     Json(req): Json<AdminRdpReq>,
 ) -> Json<Value> {
-    s.admin_rdp.write().await.insert(req.server_ip.trim().to_string(), std::time::Instant::now());
+    let server_ip = req.server_ip.trim().to_string();
+
+    // Validar que é um IP IPv4 válido da rede interna
+    let parsed: Option<std::net::Ipv4Addr> = server_ip.parse().ok();
+    match parsed {
+        Some(ip) => {
+            let octets = ip.octets();
+            let lan = (octets[0] == 172 && octets[1] == 29)
+                   || (octets[0] == 10  && octets[1] == 10);
+            if !lan {
+                return Json(serde_json::json!({"ok": false, "erro": "IP fora da rede permitida"}));
+            }
+        }
+        None => return Json(serde_json::json!({"ok": false, "erro": "IP inválido"})),
+    }
+
+    s.admin_rdp.write().await.insert(server_ip, std::time::Instant::now());
     Json(serde_json::json!({"ok": true}))
 }

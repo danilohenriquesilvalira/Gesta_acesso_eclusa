@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 
 use crate::{
     auth::{hash_password, make_token, verify_password, AdminUser, AuthUser},
-    db::audit::{log_evento, log_evento_bg, log_evento_com_ip},
+    db::audit::{self, tipo},
     rdp::{broadcast_estado, desbloquear_ip_firewall, firewall::bloquear_ip},
     state::Shared,
     types::{BlacklistReq, CreateUserReq, ForceLogoutReq, LoginReq, UpdateUserReq},
@@ -30,6 +30,28 @@ pub async fn auth_login(
         return Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}));
     }
 
+    // Rate limiting: máx 10 tentativas por IP em janela de 5 minutos
+    {
+        const MAX_TENTATIVAS: u32 = 10;
+        const JANELA_SECS:    u64 = 300;
+        let mut attempts = s.login_attempts.write().await;
+        let agora = std::time::Instant::now();
+        let entrada = attempts.entry(caller_ip.clone()).or_insert((0, agora));
+        if entrada.1.elapsed().as_secs() >= JANELA_SECS {
+            // Janela expirou — reinicia contador
+            *entrada = (1, agora);
+        } else {
+            entrada.0 += 1;
+            if entrada.0 > MAX_TENTATIVAS {
+                tracing::warn!(ip = %caller_ip, tentativas = entrada.0, "Rate limit login atingido");
+                return Json(serde_json::json!({
+                    "ok": false,
+                    "erro": "Demasiadas tentativas. Aguarde alguns minutos."
+                }));
+            }
+        }
+    }
+
     // Buscar utilizador no PostgreSQL
     let row = sqlx::query(
         "SELECT password_hash, role::text AS role, status::text AS status FROM users WHERE username = $1"
@@ -43,8 +65,9 @@ pub async fn auth_login(
     let row = match row {
         Some(r) => r,
         None => {
-            log_evento_bg(&s.db, "login_falhou",
-                &format!("Utilizador '{}' não encontrado (IP: {})", username, caller_ip));
+            audit::log_bg(&s.db, tipo::AUTH_LOGIN_FALHOU,
+                &format!("Tentativa de acesso falhada — utilizador '{}' não existe", username),
+                Some(&caller_ip));
             return Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}));
         }
     };
@@ -54,8 +77,10 @@ pub async fn auth_login(
     let status: String = sqlx::Row::try_get(&row, "status").unwrap_or_default();
 
     if status != "active" {
-        log_evento_bg(&s.db, "login_falhou",
-            &format!("Conta bloqueada/inactiva: '{}' (IP: {})", username, caller_ip));
+        audit::log_bg(&s.db, tipo::AUTH_LOGIN_FALHOU,
+            &format!("Tentativa de acesso falhada — conta '{}' está {}", username,
+                if status == "blocked" { "bloqueada" } else { "inactiva" }),
+            Some(&caller_ip));
         return Json(serde_json::json!({"ok": false, "erro": "Conta bloqueada ou inactiva"}));
     }
 
@@ -67,8 +92,9 @@ pub async fn auth_login(
         .unwrap_or(false);
 
     if !valid {
-        log_evento_bg(&s.db, "login_falhou",
-            &format!("Password errada: '{}' (IP: {})", username, caller_ip));
+        audit::log_bg(&s.db, tipo::AUTH_LOGIN_FALHOU,
+            &format!("Tentativa de acesso falhada — palavra-passe incorrecta para '{}'", username),
+            Some(&caller_ip));
         return Json(serde_json::json!({"ok": false, "erro": "Credenciais inválidas"}));
     }
 
@@ -104,9 +130,9 @@ pub async fn auth_login(
         let user_u  = username.clone();
         let ip_log  = caller_ip_u.clone();
         tokio::spawn(async move {
-            log_evento_com_ip(&db_u, "ip_desbloqueado",
-                &format!("IP desbloqueado após login bem-sucedido: utilizador '{}'", user_u),
-                &ip_log).await;
+            audit::log(&db_u, tipo::SISTEMA_IP_DESBLOQUEADO,
+                &format!("Restrição de IP levantada após autenticação bem-sucedida de '{}'", user_u),
+                Some(&ip_log)).await;
         });
         tokio::task::spawn_blocking(move || {
             for server_ip in &todos_ips {
@@ -122,8 +148,9 @@ pub async fn auth_login(
     tokio::spawn(async move {
         let _ = sqlx::query("UPDATE users SET last_login = NOW() WHERE username = $1")
             .bind(&user).execute(&db).await;
-        log_evento_com_ip(&db, "login_ok",
-            &format!("Autenticação bem-sucedida: utilizador '{}'", user), &ip).await;
+        audit::log(&db, tipo::AUTH_LOGIN_OK,
+            &format!("Acesso efectuado por '{}'", user),
+            Some(&ip)).await;
     });
 
     Json(serde_json::json!({
@@ -157,8 +184,8 @@ pub async fn auth_logout(State(s): State<Shared>, auth: AuthUser) -> Json<Value>
         cache.insert(auth.jti.clone(), exp_ts);
     }
 
-    log_evento_bg(&s.db, "logout",
-        &format!("Sessão terminada: utilizador '{}' (token revogado)", auth.username));
+    audit::log_bg(&s.db, tipo::AUTH_LOGOUT,
+        &format!("Sessão terminada por '{}' (token revogado)", auth.username), None);
     Json(serde_json::json!({"ok": true}))
 }
 
@@ -285,10 +312,10 @@ pub async fn create_usuario(
                 _            => &role,
             };
             let msg = format!(
-                "Novo utilizador criado: '{}' com papel '{}' — por '{}'",
+                "Novo utilizador criado: '{}' com papel de {} — por '{}'",
                 username, papel, admin.0.username
             );
-            tokio::spawn(async move { log_evento(&db, "user_criado", &msg).await; });
+            tokio::spawn(async move { audit::log(&db, tipo::UTILIZADOR_CRIADO, &msg, None).await; });
             Json(serde_json::json!({"ok": true}))
         }
         Err(e) if e.to_string().contains("unique") =>
@@ -394,7 +421,7 @@ pub async fn update_usuario(
     let msg = format!("Utilizador '{}' — {} — por '{}'", username, descricao, admin.0.username);
 
     let db = s.db.clone();
-    tokio::spawn(async move { log_evento(&db, "user_actualizado", &msg).await; });
+    tokio::spawn(async move { audit::log(&db, tipo::UTILIZADOR_EDITADO, &msg, None).await; });
 
     Json(serde_json::json!({"ok": true}))
 }
@@ -414,7 +441,7 @@ pub async fn delete_usuario(
         Ok(r) if r.rows_affected() > 0 => {
             let db  = s.db.clone();
             let msg = format!("Utilizador '{}' eliminado permanentemente — por '{}'", username, admin.0.username);
-            tokio::spawn(async move { log_evento(&db, "user_eliminado", &msg).await; });
+            tokio::spawn(async move { audit::log(&db, tipo::UTILIZADOR_ELIMINADO, &msg, None).await; });
             Json(serde_json::json!({"ok": true}))
         }
         Ok(_)  => Json(serde_json::json!({"ok": false, "erro": "Utilizador não encontrado"})),
@@ -475,8 +502,9 @@ pub async fn add_blacklist(
             let mot  = req.reason.clone().unwrap_or_else(|| "sem motivo especificado".to_string());
             let quem = admin.0.username.clone();
             tokio::spawn(async move {
-                log_evento(&db, "blacklist_adicionado",
-                    &format!("IP '{}' bloqueado — motivo: {} — por '{}'", ip, mot, quem)).await;
+                audit::log(&db, tipo::SISTEMA_BLACKLIST_ADD,
+                    &format!("IP {} bloqueado manualmente — motivo: {} — por '{}'", ip, mot, quem),
+                    Some(&ip)).await;
             });
 
             // Aplicar regra no firewall — cada servidor em thread própria para não bloquear
@@ -519,8 +547,9 @@ pub async fn remove_blacklist(
             let db   = s.db.clone();
             let quem = admin.0.username.clone();
             tokio::spawn(async move {
-                log_evento(&db, "blacklist_removido",
-                    &format!("Bloqueio de IP (id={}) levantado — por '{}'", id, quem)).await;
+                audit::log(&db, tipo::SISTEMA_BLACKLIST_REMOVIDO,
+                    &format!("Bloqueio de IP levantado (registo #{}) — por '{}'", id, quem),
+                    None).await;
             });
 
             // Remover regra do firewall — cada servidor em thread própria para não bloquear
@@ -610,17 +639,19 @@ pub async fn admin_force_logout(
 
     // 4. Audit log
     let db  = s.db.clone();
-    let msg = match sessao_encerrada.as_deref() {
-        Some(cliente) => format!(
-            "Sessão de '{}' encerrada pelo administrador '{}' (cliente: {})",
-            username, admin.0.username, cliente
+    let eclusa_nome = sessao_encerrada.as_deref()
+        .map(|c| if c == "eclusa_RG" { "Eclusa RG" } else { "Eclusa PN" });
+    let msg = match eclusa_nome {
+        Some(eclusa) => format!(
+            "Sessão de '{}' na {} encerrada forçadamente pelo administrador '{}'",
+            username, eclusa, admin.0.username
         ),
         None => format!(
-            "Sessão de '{}' encerrada pelo administrador '{}' (sem sessão activa registada)",
+            "Saída forçada de '{}' pelo administrador '{}' (sem sessão RDP activa registada)",
             username, admin.0.username
         ),
     };
-    tokio::spawn(async move { log_evento(&db, "sessao_encerrada", &msg).await; });
+    tokio::spawn(async move { audit::log(&db, tipo::SESSAO_FORCE_ENCERRADA, &msg, None).await; });
 
     Json(serde_json::json!({"ok": true, "sessao_encerrada": sessao_encerrada}))
 }
