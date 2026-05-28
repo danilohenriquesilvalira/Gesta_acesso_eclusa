@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod failover;
 mod handlers;
+mod middleware;
 mod plc;
 mod rdp;
 mod state;
@@ -11,6 +12,7 @@ mod types;
 use axum::{
     error_handling::HandleErrorLayer,
     http::StatusCode,
+    middleware as axum_middleware,
     routing::{delete, get, post},
     Router,
 };
@@ -335,20 +337,28 @@ async fn main() {
         .timeout(Duration::from_secs(30));
 
     // ── Router ────────────────────────────────────────────────────────────────
-    let app = Router::new()
-        // ── Público — sem autenticação ────────────────────────────────────────
+
+    // Rotas LAN-only: sem JWT, aceitas apenas de 172.29.x.x / 10.10.x.x / loopback
+    let lan_routes = Router::new()
+        .route("/stream/:cliente/frame",     post(post_frame))
+        .route("/eclusas/:id/estado",        post(atualizar_eclusa))
+        .route("/plc/dados",                 post(receber_dados_plc))
+        .route("/heartbeat/:servidor",       post(heartbeat))
+        .route("/wincc-status/:servidor",    post(wincc_status))
+        .layer(axum_middleware::from_fn(middleware::apenas_lan));
+
+    // Rotas públicas: abertas a todos os IPs (login, health, SSE, leitura)
+    let public_routes = Router::new()
         .route("/health",                    get(health))
         .route("/auth/login",                post(auth_login))
         .route("/auth/logout",               post(auth_logout))
         .route("/eventos",                   get(sse_eventos))
-        // ── Streaming — sem auth (LAN only, WinCC Streamer) ───────────────────
-        .route("/stream/:cliente/frame",     post(post_frame))
         .route("/stream/:cliente/mjpeg",     get(get_mjpeg))
         .route("/stream/:cliente/ws",        get(ws_viewer))
-        // ── Eclusas — WinCC escreve estado, sem auth (LAN only) ───────────────
-        .route("/eclusas",                   get(get_eclusas))
-        .route("/eclusas/:id/estado",        post(atualizar_eclusa))
-        // ── Protegido — requer JWT válido ─────────────────────────────────────
+        .route("/eclusas",                   get(get_eclusas));
+
+    // Rotas protegidas: requerem JWT válido (validado dentro dos handlers)
+    let protected_routes = Router::new()
         .route("/estado",                    get(get_estado))
         .route("/sessoes",                   get(get_sessoes))
         .route("/sessoes/simples",           get(sessoes_simples))
@@ -362,18 +372,18 @@ async fn main() {
         .route("/operadores",                get(get_operadores).post(add_operador))
         .route("/operadores/:nome",          delete(del_operador))
         .route("/logs",                      get(get_logs))
-        // ── Admin only ────────────────────────────────────────────────────────
+        .route("/plc/dados",                 get(get_dados_plc))
         .route("/usuarios",                  get(list_usuarios).post(create_usuario))
         .route("/usuarios/:username",        get(get_usuario).put(update_usuario).delete(delete_usuario))
         .route("/blacklist",                 get(list_blacklist).post(add_blacklist))
         .route("/blacklist/:id",             delete(remove_blacklist))
         .route("/admin/force-logout",        post(admin_force_logout))
-        .route("/admin/rdp-direto",          post(admin_rdp_direto))
-        // ── PLC — Node-RED envia dados dos PLCs (sem auth, LAN only) ────────────
-        .route("/plc/dados",                 get(get_dados_plc).post(receber_dados_plc))
-        // ── Heartbeat — wincc-agent em cada Windows Server (sem auth, LAN only) ─
-        .route("/heartbeat/:servidor",        post(heartbeat))
-        .route("/wincc-status/:servidor",    post(wincc_status))
+        .route("/admin/rdp-direto",          post(admin_rdp_direto));
+
+    let app = Router::new()
+        .merge(lan_routes)
+        .merge(public_routes)
+        .merge(protected_routes)
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(cors)
