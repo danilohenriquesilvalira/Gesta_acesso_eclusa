@@ -97,7 +97,13 @@ export default function App() {
     }
   }, []);
 
-  const { estado, servidorHealth, apiOk, fetchEstado } = useEstado(apiUrl, ipReserva, onFailoverStable, onVoltouStable, token);
+  const onSessionExpired = useCallback((expiredUsername: string) => {
+    if (!expiredUsername || expiredUsername === username) {
+      logout();
+    }
+  }, [username, logout]);
+
+  const { estado, servidorHealth, apiOk, fetchEstado } = useEstado(apiUrl, ipReserva, onFailoverStable, onVoltouStable, token, onSessionExpired);
 
   const onFailoverManual = useCallback((cliente: string, idReserva: string, _ipR: string) => {
     const clienteKey = ECLUSA_CLIENTE[cliente] ?? cliente;

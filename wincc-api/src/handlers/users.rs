@@ -104,6 +104,14 @@ pub async fn auth_login(
         Err(e) => return Json(serde_json::json!({"ok": false, "erro": format!("Erro JWT: {}", e)})),
     };
 
+    // Registar token activo — usado pelo session_expiry_watchdog para auto-logout ao fim de 24h
+    {
+        let claims = crate::auth::verify_token(&token, &s.cfg.jwt_secret);
+        if let Some(c) = claims {
+            s.active_tokens.write().await.insert(username.clone(), (c.jti, c.iat as i64));
+        }
+    }
+
     // Desbloquear IP na DB — await directo para que a resposta ao cliente já reflicta o estado correcto
     {
         let result = sqlx::query(
@@ -183,6 +191,9 @@ pub async fn auth_logout(State(s): State<Shared>, auth: AuthUser) -> Json<Value>
         let mut cache = s.revoked_jtis.write().await;
         cache.insert(auth.jti.clone(), exp_ts);
     }
+
+    // Limpar token activo — watchdog não vai tentar auto-logout após logout voluntário
+    s.active_tokens.write().await.remove(&auth.username);
 
     audit::log_bg(&s.db, tipo::AUTH_LOGOUT,
         &format!("Sessão terminada por '{}' (token revogado)", auth.username), None);

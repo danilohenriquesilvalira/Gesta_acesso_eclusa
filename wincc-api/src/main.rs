@@ -81,6 +81,89 @@ async fn shutdown_signal() {
     ctrl_c.await;
 }
 
+// ── Watchdog: encerra sessões cujo token expirou (24h) ───────────────────────
+
+async fn session_expiry_watchdog(state: state::Shared) {
+    let expiry_secs = (crate::config::JWT_EXPIRY_HOURS * 3_600) as i64;
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+
+        let agora = chrono::Utc::now().timestamp();
+
+        // Snapshot dos tokens activos — sem lock durante o processamento
+        let tokens: Vec<(String, String, i64)> = {
+            state.active_tokens.read().await
+                .iter()
+                .map(|(u, (jti, iat))| (u.clone(), jti.clone(), *iat))
+                .collect()
+        };
+
+        for (username, jti, iat) in tokens {
+            if agora < iat + expiry_secs { continue; } // ainda dentro das 24h
+
+            // Token expirou — verificar se tem sessão activa na eclusa
+            let (tem_rg, tem_pn) = {
+                let st = state.inner.read().await;
+                (
+                    st.sessoes.eclusa_RG.conectado && st.sessoes.eclusa_RG.operador.eq_ignore_ascii_case(&username),
+                    st.sessoes.eclusa_PN.conectado && st.sessoes.eclusa_PN.operador.eq_ignore_ascii_case(&username),
+                )
+            };
+
+            // Encerrar sessão da eclusa RG se activa
+            if tem_rg {
+                let mut st = state.inner.write().await;
+                st.sessoes.eclusa_RG     = Default::default();
+                st.supervisoes.eclusa_RG.clear();
+                rdp::broadcast_estado(&st, &state.sse_tx);
+                drop(st);
+                state.failover_ips.write().await.remove("eclusa_RG");
+                let db  = state.db.clone();
+                let usr = username.clone();
+                tokio::spawn(async move {
+                    let msg = format!("Sessão de '{}' na Eclusa RG encerrada automaticamente — token JWT expirou ao fim de 24h", usr);
+                    audit::log(&db, audit::tipo::AUTH_FORCE_LOGOUT, &msg, None).await;
+                });
+                tracing::info!(utilizador = %username, "Sessão Eclusa RG encerrada — token 24h expirou");
+            }
+
+            // Encerrar sessão da eclusa PN se activa
+            if tem_pn {
+                let mut st = state.inner.write().await;
+                st.sessoes.eclusa_PN     = Default::default();
+                st.supervisoes.eclusa_PN.clear();
+                rdp::broadcast_estado(&st, &state.sse_tx);
+                drop(st);
+                state.failover_ips.write().await.remove("eclusa_PN");
+                let db  = state.db.clone();
+                let usr = username.clone();
+                tokio::spawn(async move {
+                    let msg = format!("Sessão de '{}' na Eclusa PN encerrada automaticamente — token JWT expirou ao fim de 24h", usr);
+                    audit::log(&db, audit::tipo::AUTH_FORCE_LOGOUT, &msg, None).await;
+                });
+                tracing::info!(utilizador = %username, "Sessão Eclusa PN encerrada — token 24h expirou");
+            }
+
+            // Revogar token em memória (já expirou para o JWT mas garante consistência)
+            {
+                let mut cache = state.revoked_jtis.write().await;
+                cache.insert(jti, iat + expiry_secs);
+            }
+
+            // Remover de active_tokens — não repetir na próxima iteração
+            state.active_tokens.write().await.remove(&username);
+
+            // Emite SSE para fechar sessão no frontend
+            let payload = serde_json::json!({
+                "_event":    "session_expired",
+                "username":  username,
+            }).to_string();
+            let _ = state.sse_tx.send(payload);
+        }
+    }
+}
+
 // ── Watchdog: marca windows_vivo=false se heartbeat parar há mais de 5s ──────
 
 async fn servidor_health_watchdog(state: state::Shared) {
@@ -392,6 +475,7 @@ async fn main() {
     tokio::spawn(failover::failover_monitor_loop(state.clone()));
     tokio::spawn(cleanup_loop(state.clone()));
     tokio::spawn(servidor_health_watchdog(state.clone()));
+    tokio::spawn(session_expiry_watchdog(state.clone()));
 
     // ── Middleware ────────────────────────────────────────────────────────────
     // CORS restrito às origens configuradas em ALLOWED_ORIGINS (.env)

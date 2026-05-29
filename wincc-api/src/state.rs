@@ -60,6 +60,9 @@ pub struct AppState {
     /// Rate limiting para /auth/login: ip → (contagem, janela_inicio)
     /// Janela de 5 minutos, máx 10 tentativas. Limpo pelo cleanup_loop.
     pub login_attempts: RwLock<HashMap<String, (u32, std::time::Instant)>>,
+    /// Token activo por username: username → (jti, iat unix timestamp)
+    /// Registado no login, limpo no logout. Usado pelo session_expiry_watchdog.
+    pub active_tokens: RwLock<HashMap<String, (String, i64)>>,
 }
 
 impl AppState {
@@ -115,6 +118,7 @@ impl AppState {
             admin_rdp:       RwLock::new(HashMap::new()),
             failover_ips:    RwLock::new(HashMap::new()),
             login_attempts:  RwLock::new(HashMap::new()),
+            active_tokens:   RwLock::new(HashMap::new()),
         })
     }
 

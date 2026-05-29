@@ -6,23 +6,26 @@ export type FailoverPayload  = { cliente: string; ip_reserva: string; id_reserva
 export type VoltouPayload    = { servidor: string; ip_original: string; cliente_key?: string; reconectar_auto?: boolean; operador?: string };
 
 export function useEstado(
-  apiUrl:      string,
-  _ipReserva:  string,
-  onFailover?: (p: FailoverPayload) => void,
-  onVoltou?:   (p: VoltouPayload)   => void,
-  token?:      string,
+  apiUrl:           string,
+  _ipReserva:       string,
+  onFailover?:      (p: FailoverPayload) => void,
+  onVoltou?:        (p: VoltouPayload)   => void,
+  token?:           string,
+  onSessionExpired?: (username: string)  => void,
 ) {
   const [estado,          setEstado]          = useState<Estado | null>(null);
   const [servidorHealth,  setServidorHealth]  = useState<Record<string, ServidorHealth>>({});
   const [apiOk,           setApiOk]           = useState<boolean | null>(null);
 
-  const onFailoverRef  = useRef(onFailover);
-  const onVoltouRef    = useRef(onVoltou);
+  const onFailoverRef        = useRef(onFailover);
+  const onVoltouRef          = useRef(onVoltou);
+  const onSessionExpiredRef  = useRef(onSessionExpired);
   const disparadoRef   = useRef<Record<string, boolean>>({});
   const shRef          = useRef<Record<string, ServidorHealth>>({});
 
-  onFailoverRef.current = onFailover;
-  onVoltouRef.current   = onVoltou;
+  onFailoverRef.current       = onFailover;
+  onVoltouRef.current         = onVoltou;
+  onSessionExpiredRef.current = onSessionExpired;
 
   const processarEstado = useCallback((json: Estado) => {
     // ── servidor_health — só atualiza estado React se windows_vivo/wincc_vivo mudou
@@ -104,6 +107,11 @@ export function useEstado(
         // WinCC activou Encerrar_Sessao — fechar mstsc silenciosamente antes do logoff
         if (json._event === "fechar_rdp") {
           invoke("fechar_rdp_transicao").catch(() => invoke("fechar_rdp").catch(() => {}));
+          return;
+        }
+        // Token expirou ao fim de 24h — logout automático
+        if (json._event === "session_expired") {
+          onSessionExpiredRef.current?.(json.username ?? "");
           return;
         }
         processarEstado(json as Estado);
